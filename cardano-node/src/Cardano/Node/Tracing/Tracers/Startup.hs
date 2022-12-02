@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -18,6 +19,7 @@ import qualified Cardano.Api as Api
 import           Prelude
 
 import           Data.Aeson (ToJSON (..), Value (..), (.=))
+import qualified Data.Aeson as Aeson
 import           Data.List (intercalate)
 import qualified Data.Map.Strict as Map
 import           Data.Text (Text, pack)
@@ -141,6 +143,27 @@ namesStartupInfo = \case
   BIByron {}                                -> ["Byron"]
   BINetwork {}                              -> ["Network"]
 
+
+-- | A tuple of consensus and network versions.  It's used to derive a custom
+-- `FromJSON` and `ToJSON` instances.
+--
+data ConsensusNetworkVersionTuple a b = ConsensusNetworkVersionTuple a b
+
+-- TODO: provide JSON instance for `BlockNodeToClientVersion`
+instance Show blkVersion => ToJSON (ConsensusNetworkVersionTuple NodeToClientVersion blkVersion) where
+    toJSON (ConsensusNetworkVersionTuple nodeToClientVersion blockVersion) =
+      Aeson.object [ "nodeToClientVersion" .= toJSON nodeToClientVersion
+                   , "blockVersion" .= String (pack . show $ blockVersion)
+                   ]
+
+-- TODO: provide JSON instance for `BlockNodeToNodeVersion`
+instance Show blkVersion => ToJSON (ConsensusNetworkVersionTuple NodeToNodeVersion blkVersion) where
+    toJSON (ConsensusNetworkVersionTuple nodeToClientVersion blockVersion) =
+      Aeson.object [ "nodeToNodeVersion" .= toJSON nodeToClientVersion
+                   , "blockVersion" .= String (pack . show $ blockVersion)
+                   ]
+
+
 instance ( Show (BlockNodeToNodeVersion blk)
          , Show (BlockNodeToClientVersion blk)
          )
@@ -162,9 +185,9 @@ instance ( Show (BlockNodeToNodeVersion blk)
         case dtal of
           DMaximum ->
             [ "nodeToNodeVersions" .=
-                toJSON (map show . Map.assocs $ supportedNodeToNodeVersions)
+                toJSON (map (uncurry ConsensusNetworkVersionTuple) . Map.assocs $ supportedNodeToNodeVersions)
             , "nodeToClientVersions" .=
-                toJSON (map show . Map.assocs $ supportedNodeToClientVersions)
+                toJSON (map (uncurry ConsensusNetworkVersionTuple) . Map.assocs $ supportedNodeToClientVersions)
             ]
           _ ->
             [ "maxNodeToNodeVersion" .=
