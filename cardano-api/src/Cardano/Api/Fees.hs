@@ -62,8 +62,6 @@ import           Control.Monad.Trans.Except
 import qualified Prettyprinter as PP
 import qualified Prettyprinter.Render.String as PP
 
-import           Lens.Micro ((^.))
-
 import qualified Cardano.Binary as CBOR
 import qualified Cardano.Ledger.BaseTypes as Ledger
 import           Cardano.Slotting.EpochInfo (EpochInfo, hoistEpochInfo)
@@ -73,7 +71,6 @@ import qualified Cardano.Chain.Common as Byron
 import qualified Cardano.Ledger.Coin as Ledger
 import           Cardano.Ledger.Core (EraTx (sizeTxF))
 import qualified Cardano.Ledger.Core as Ledger
-import           Cardano.Ledger.Core (EraTx(sizeTxF))
 import qualified Cardano.Ledger.Crypto as Ledger
 import qualified Cardano.Ledger.Era as Ledger.Era (Crypto)
 import qualified Cardano.Ledger.Keys as Ledger
@@ -85,9 +82,6 @@ import qualified Cardano.Ledger.Shelley.API.Wallet as Ledger (evaluateTransactio
                    evaluateTransactionFee)
 import qualified Cardano.Ledger.Shelley.API.Wallet as Shelley
 import           Cardano.Ledger.Shelley.PParams (ShelleyPParamsHKD (..))
-import           Cardano.Ledger.Shelley.TxBody (ShelleyEraTxBody)
-
-import           Cardano.Ledger.Mary.Value (MaryValue)
 
 import qualified Cardano.Ledger.Alonzo as Alonzo
 import qualified Cardano.Ledger.Alonzo.Language as Alonzo
@@ -97,6 +91,8 @@ import qualified Cardano.Ledger.Alonzo.Tools as Alonzo
 import qualified Cardano.Ledger.Alonzo.Tx as Alonzo
 import qualified Cardano.Ledger.Alonzo.TxInfo as Alonzo
 import qualified Cardano.Ledger.Alonzo.TxWitness as Alonzo
+
+import qualified PlutusLedgerApi.V1 as Plutus
 
 import qualified Cardano.Ledger.Babbage as Babbage
 import           Cardano.Ledger.Babbage.PParams (BabbagePParamsHKD (..))
