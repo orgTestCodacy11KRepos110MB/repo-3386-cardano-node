@@ -130,6 +130,7 @@ library
                       , cborg
                       , contra-tracer
                       , containers
+                      , contra-tracer
                       , cryptonite
                       , deepseq
                       , directory

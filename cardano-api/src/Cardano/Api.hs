@@ -527,6 +527,7 @@ module Cardano.Api (
     Error(..),
     throwErrorAsException,
     FileError(..),
+    toAcquiringFailure,
 
     -- * Node interaction
     -- | Operations that involve talking to a local Cardano node.
@@ -619,8 +620,13 @@ module Cardano.Api (
     QueryUTxOFilter(..),
     UTxO(..),
     queryNodeLocalState,
+    queryNodeLocalState_,
     executeQueryCardanoMode,
+
     UnsupportedNtcVersionError(..),
+
+    MinNodeToClientVersion,
+    AcquireFailure(..),
 
     -- *** Local tx monitoring
     LocalTxMonitorClient(..),
@@ -636,6 +642,7 @@ module Cardano.Api (
 
     -- *** Common queries
     determineEra,
+    determineEra_,
     getLocalChainTip,
 
     -- * Node operation
@@ -703,9 +710,12 @@ module Cardano.Api (
 
     -- ** Monadic queries
     LocalStateQueryExpr,
-    executeLocalStateQueryExpr,
+    executeLocalStateQueryExpr_,
     queryExpr,
-    determineEraExpr,
+    queryExpr_,
+    maybeQueryExpr_,
+    determineEraExpr_,
+    getNtcVersion_,
 
     chainPointToSlotNo,
     chainPointToHeaderHash,

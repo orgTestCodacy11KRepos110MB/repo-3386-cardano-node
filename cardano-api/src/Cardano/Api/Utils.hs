@@ -30,7 +30,7 @@ import qualified Data.Aeson.Types as Aeson
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Builder as Builder
 import qualified Data.ByteString.Lazy as LBS
-import           Data.Maybe.Strict
+import           Data.Maybe.Strict (StrictMaybe(..))
 import           Data.Text (Text)
 import qualified Data.Text as Text
 import           GHC.IO.Handle.FD (openFileBlocking)
@@ -131,4 +131,3 @@ renderEra (AnyCardanoEra AllegraEra) = "Allegra"
 renderEra (AnyCardanoEra MaryEra)    = "Mary"
 renderEra (AnyCardanoEra AlonzoEra)  = "Alonzo"
 renderEra (AnyCardanoEra BabbageEra) = "Babbage"
-
