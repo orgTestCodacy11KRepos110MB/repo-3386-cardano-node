@@ -64,10 +64,10 @@ prop_roundtrip_txbodycontent_txouts =
       a === b
 
   isSimpleScriptV1 :: ReferenceScript era -> Bool
-  isSimpleScriptV1 = isLang (SimpleScriptLanguage SimpleScriptV1)
+  isSimpleScriptV1 = isLang SimpleScriptLanguage
 
   isSimpleScriptV2 :: ReferenceScript era -> Bool
-  isSimpleScriptV2 = isLang (SimpleScriptLanguage SimpleScriptV2)
+  isSimpleScriptV2 = isLang SimpleScriptLanguage
 
   isLang :: ScriptLanguage a -> ReferenceScript era -> Bool
   isLang expected = \case

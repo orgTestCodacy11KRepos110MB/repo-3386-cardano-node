@@ -336,18 +336,15 @@ module Cardano.Api (
     -- | Both 'PaymentCredential's and 'StakeCredential's can use scripts.
 
     -- ** Script languages
-    SimpleScriptV1,
-    SimpleScriptV2,
+    SimpleScript',
     PlutusScriptV1,
     PlutusScriptV2,
     ScriptLanguage(..),
-    SimpleScriptVersion(..),
     PlutusScriptVersion(..),
     AnyScriptLanguage(..),
     AnyPlutusScriptVersion(..),
     IsPlutusScriptLanguage(..),
     IsScriptLanguage(..),
-    IsSimpleScriptLanguage(..),
 
     -- ** Scripts in a specific language
     Script(..),
@@ -388,9 +385,6 @@ module Cardano.Api (
     -- ** Simple scripts
     -- | Making multi-signature and time-lock scripts.
     SimpleScript(..),
-    TimeLocksSupported(..),
-    timeLocksSupported,
-    adjustSimpleScriptVersion,
 
     -- ** Plutus scripts
     PlutusScript,
