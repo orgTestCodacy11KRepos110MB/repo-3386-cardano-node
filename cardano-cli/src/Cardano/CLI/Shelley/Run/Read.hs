@@ -210,9 +210,8 @@ readScriptWitness era' (SimpleScriptWitnessFile (ScriptFile scriptFile)) = do
                                          readFileScriptInAnyLang scriptFile
     ScriptInEra langInEra script'   <- validateScriptSupportedInEra era' script
     case script' of
-      SimpleScript version sscript ->
-        return . SimpleScriptWitness
-                   langInEra version $ SScript sscript
+      SimpleScript sscript ->
+        return . SimpleScriptWitness langInEra $ SScript sscript
 
       -- If the supplied cli flags were for a simple script (i.e. the user did
       -- not supply the datum, redeemer or ex units), but the script file turns
@@ -261,7 +260,7 @@ readScriptWitness era' (PlutusReferenceScriptWitnessFiles refTxIn
       case scriptLanguageSupportedInEra era' anyScriptLanguage of
         Just sLangInEra ->
           case languageOfScriptLanguageInEra sLangInEra of
-            SimpleScriptLanguage _v ->
+            SimpleScriptLanguage ->
               -- TODO: We likely need another datatype eg data ReferenceScriptWitness lang
               -- in order to make this branch unrepresentable.
               error "readScriptWitness: Should not be possible to specify a simple script"
@@ -286,8 +285,8 @@ readScriptWitness era' (SimpleReferenceScriptWitnessFiles refTxIn
       case scriptLanguageSupportedInEra era' anyScriptLanguage of
         Just sLangInEra ->
           case languageOfScriptLanguageInEra sLangInEra of
-            SimpleScriptLanguage v ->
-              return . SimpleScriptWitness sLangInEra v
+            SimpleScriptLanguage ->
+              return . SimpleScriptWitness sLangInEra
                      $ SReferenceScript refTxIn (unPolicyId <$> mPid)
             PlutusScriptLanguage{} ->
               error "readScriptWitness: Should not be possible to specify a plutus script"
@@ -398,12 +397,11 @@ deserialiseScriptInAnyLang bs =
     --
     case deserialiseFromJSON AsTextEnvelope bs of
       Left _   ->
-        -- The SimpleScript language has the property that it is backwards
-        -- compatible, so we can parse as the latest version and then downgrade
-        -- to the minimum version that has all the features actually used.
-        case deserialiseFromJSON (AsSimpleScript AsSimpleScriptV2) bs of
-          Left  err    -> Left (ScriptDecodeSimpleScriptError err)
-          Right script -> Right (toMinimumSimpleScriptVersion script)
+        -- In addition to the TextEnvelope format, we also try to
+        -- deserialize the JSON representation of SimpleScripts.
+        case Aeson.eitherDecodeStrict' bs of
+          Left  err    -> Left (ScriptDecodeSimpleScriptError $ JsonDecodeError err)
+          Right script -> Right $ ScriptInAnyLang SimpleScriptLanguage $ SimpleScript script
 
       Right te ->
         case deserialiseFromTextEnvelopeAnyOf textEnvTypes te of
@@ -415,11 +413,8 @@ deserialiseScriptInAnyLang bs =
     -- script version.
     textEnvTypes :: [FromSomeType HasTextEnvelope ScriptInAnyLang]
     textEnvTypes =
-      [ FromSomeType (AsScript AsSimpleScriptV1)
-                     (ScriptInAnyLang (SimpleScriptLanguage SimpleScriptV1))
-
-      , FromSomeType (AsScript AsSimpleScriptV2)
-                     (ScriptInAnyLang (SimpleScriptLanguage SimpleScriptV2))
+      [ FromSomeType (AsScript AsSimpleScript)
+                     (ScriptInAnyLang SimpleScriptLanguage)
 
       , FromSomeType (AsScript AsPlutusScriptV1)
                      (ScriptInAnyLang (PlutusScriptLanguage PlutusScriptV1))
@@ -427,19 +422,6 @@ deserialiseScriptInAnyLang bs =
       , FromSomeType (AsScript AsPlutusScriptV2)
                      (ScriptInAnyLang (PlutusScriptLanguage PlutusScriptV2))
       ]
-
-    toMinimumSimpleScriptVersion :: SimpleScript SimpleScriptV2
-                                 -> ScriptInAnyLang
-    toMinimumSimpleScriptVersion s =
-      -- TODO alonzo: this will need to be adjusted when more versions are added
-      -- with appropriate helper functions it can probably be done in an
-      -- era-generic style
-      case adjustSimpleScriptVersion SimpleScriptV1 s of
-        Nothing -> ScriptInAnyLang (SimpleScriptLanguage SimpleScriptV2)
-                                   (SimpleScript SimpleScriptV2 s)
-        Just s' -> ScriptInAnyLang (SimpleScriptLanguage SimpleScriptV1)
-                                   (SimpleScript SimpleScriptV1 s')
-
 
 -- Tx & TxBody
 
