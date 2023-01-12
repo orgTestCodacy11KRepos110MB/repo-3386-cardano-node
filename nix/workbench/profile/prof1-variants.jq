@@ -150,6 +150,12 @@ def all_profile_variants:
       }
     } as $chainsync_cluster
   |
+    { composition:
+      { locations:                      ["EU", "AP", "US"]
+      , topology:                       "torus"
+      }
+    } as $aws
+  |
   ##
   ### Definition vocabulary:  filtering
   ##
@@ -388,7 +394,7 @@ def all_profile_variants:
   ###
   ## Base variants:
   , { name: "default"
-    , desc: "Default, as per nix/workbench/profiles/defaults.jq"
+    , desc: "Default, as per nix/workbench/profile/prof0-defaults.jq"
     }
   , $plutus_base * $plutus_loop_counter *
     { name: "plutus"
@@ -444,6 +450,9 @@ def all_profile_variants:
     }
   , $citest_base * $without_tracer *
     { name: "ci-test-notracer"
+    }
+  , $citest_base * $aws *
+    { name: "aws-test"
     }
 
   ## CI variants: bench duration, 15 blocks

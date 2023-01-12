@@ -27,8 +27,8 @@ case "$op" in
         ;;
 
     setenv-defaults )
-        local usage="USAGE: wb nomad $op PROFILE-DIR"
-        local profile_dir=${1:?$usage}
+        local usage="USAGE: wb nomad $op BACKEND-DIR"
+        local backend_dir=${1:?$usage}
 
         # TODO: stateful nomad ?
         # https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
@@ -36,13 +36,13 @@ case "$op" in
 
         # The output files of the profiles Nix derivation:
         ## The one provided by the profile, the one used may suffer changes (jq).
-        local profile_nomad_job_file="$profile_dir"/nomad-job.json
+        local profile_nomad_job_file="$backend_dir"/nomad-job.json
         setenvjqstr 'profile_nomad_job_file' "$profile_nomad_job_file"
         ## Look up `cluster` OCI image's name and tag (also Nix profile).
-        setenvjqstr 'oci_image_name' ${WB_OCI_IMAGE_NAME:-$(jq -r '. ["clusterNode"]["imageName"]' "$profile_dir"/oci-images.json)}
-        setenvjqstr 'oci_image_tag'  ${WB_OCI_IMAGE_TAG:-$(jq -r '. ["clusterNode"]["imageTag"]' "$profile_dir"/oci-images.json)}
+        setenvjqstr 'oci_image_name' ${WB_OCI_IMAGE_NAME:-$(jq -r '. ["clusterNode"]["imageName"]' "$backend_dir"/oci-images.json)}
+        setenvjqstr 'oci_image_tag'  ${WB_OCI_IMAGE_TAG:-$(jq -r '. ["clusterNode"]["imageTag"]' "$backend_dir"/oci-images.json)}
         ## Script that creates the OCI image from nix2container layered output.
-        setenvjqstr 'oci_image_skopeo_script' $(jq -r '. ["clusterNode"]["copyToPodman"]' "$profile_dir"/oci-images.json)
+        setenvjqstr 'oci_image_skopeo_script' $(jq -r '. ["clusterNode"]["copyToPodman"]' "$backend_dir"/oci-images.json)
 
         # Socket of the process that connects nomad-driver-podman with podman.
         # Can't reside inside $dir, can't use a path longer than 108 characters!

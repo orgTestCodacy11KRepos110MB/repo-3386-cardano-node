@@ -14423,6 +14423,22 @@
         "type": "github"
       }
     },
+    "ops-lib": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1669934189,
+        "narHash": "sha256-Vz01RmVoicNWQYStt6XmITvBxqWOsk+pnkBdfqV9nR4=",
+        "owner": "input-output-hk",
+        "repo": "ops-lib",
+        "rev": "2fdfc6051e69f66d9a8fce7f9a09cf6bc8dd185e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "input-output-hk",
+        "repo": "ops-lib",
+        "type": "github"
+      }
+    },
     "ouroboros-network": {
       "flake": false,
       "locked": {
@@ -15016,6 +15032,7 @@
         "node-measured": "node-measured",
         "node-process": "node-process_4",
         "node-snapshot": "node-snapshot_4",
+        "ops-lib": "ops-lib",
         "plutus-apps": "plutus-apps_8",
         "std": [
           "tullia",

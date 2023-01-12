@@ -6,9 +6,6 @@
 let
   name = "supervisor";
 
-  # Unlike the nomad backend `useCabalRun` is honored here.
-  inherit useCabalRun;
-
   extraShellPkgs = with pkgs;
     [
       python3Packages.supervisor
@@ -36,13 +33,18 @@ let
           inherit pkgs lib stateDir;
           inetHttpServerPort = "127.0.0.1:9001";
         };
-      in pkgs.runCommand "workbench-backend-output-${profileNix.name}-${name}"
+      in pkgs.runCommand "workbench-backend-output-${profileNix.profileName}-${name}"
         {supervisorConfPath = supervisorConf.INI;}
         ''
         mkdir $out
         cp    $supervisorConfPath           $out/supervisor.conf
         '';
+
+  overlay =
+    proTopo: self: super:
+    {
+    };
 in
 {
-  inherit name useCabalRun extraShellPkgs materialise-profile;
+  inherit name extraShellPkgs materialise-profile overlay useCabalRun;
 }

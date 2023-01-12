@@ -4,7 +4,7 @@
 , run
 , trace ? false }:
 
-pkgs.runCommand "workbench-run-analysis-${profileNix.name}"
+pkgs.runCommand "workbench-run-analysis-${profileNix.profileName}"
   { requiredSystemFeatures = [ "benchmark" ];
     nativeBuildInputs = with pkgs.haskellPackages; with pkgs;
       [ bash coreutils gnused jq moreutils nixWrapped workbench.workbench ];

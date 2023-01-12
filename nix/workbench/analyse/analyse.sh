@@ -37,7 +37,7 @@ usage_analyse() {
 
   $(red analyse) $(blue options):
 
-    $(helpopt --filters F,F,F..)  Comma-separated list of named chain filters:  see bench/chain-filters
+    $(helpopt --filters F,F,F..)  Comma-separated list of named chain filters:  see bench/analyse/chain-filters
                          Note: filter names have no .json suffix
                          Defaults are specified by the run's profile.
     $(helpopt --filter-expr JSON)
@@ -616,7 +616,7 @@ throttle_shell_job_spawns() {
 
 analysis_set_filters() {
     local filter_names=($(echo $1 | sed 's_,_ _g'))
-    local filter_paths=(${filter_names[*]/#/"$global_basedir/chain-filters/"})
+    local filter_paths=(${filter_names[*]/#/"$global_basedir/analyse/chain-filters/"})
     local filter_files=(${filter_paths[*]/%/.json})
 
     for f in ${filter_files[*]}

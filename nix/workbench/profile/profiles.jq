@@ -15,18 +15,18 @@
 ## Profiles themselves are layered as follows:
 ##
 ##  - era-dependent defaults for the aforementioned sections:
-##    - profiles/defaults.jq
+##    - profile/defaults.jq
 ##
 ##  - overlaid with generated profile variants (including adhoc profiles):
-##    - profiles/variants.jq
+##    - profile/variants.jq
 ##
 ##  - each then further overlaid with derived parameters, computed from the above:
-##    - profiles/derived.jq
+##    - profile/derived.jq
 ##
 ## Profiles variants are generated as a cartesian product of variations
 ## of the three axes: genesis, generator and node.
 ## These generated profiles are assigned computed names, as per the
-## profile_name() function in 'profiles/derived.jq'.
+## profile_name() function in 'profile/prof3-derived.jq'.
 ##
 ## Cluster composition must have the following structure:
 ##  { n_bft_hosts:      INT
@@ -35,7 +35,7 @@
 ##  }
 ##
 ## Names of non-adhoc profiles are computed by the 'profile_name' function in
-## profiles/derived.jq, with era suffix appended, and have the following structure:
+## profile/prof3-derived.jq, with era suffix appended, and have the following structure:
 ##
 ##   k${n_pools}
 ##    -[${dense_pool_density}ppn]
@@ -69,7 +69,7 @@ include "prof3-derived";
 ##
 ## Testable with:
 ##
-##   jq -n 'include "composition" { search: "nix/workbench/profiles" }; topology_composition({ coreNodes: { bft1: { pools: 0 } } })'
+##   jq -n 'include "composition" { search: "nix/workbench/profile" }; topology_composition({ coreNodes: { bft1: { pools: 0 } } })'
 ##
 def topology_composition($topo):
     $topo

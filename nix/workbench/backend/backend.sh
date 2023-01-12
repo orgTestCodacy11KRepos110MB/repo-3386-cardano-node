@@ -4,9 +4,9 @@ usage_backend() {
                      Test if the cluster specified by the run directory
                        is currently running
 
-    setenv-defaults PROFILE-DIR
+    setenv-defaults BACKEND-DATA-DIR
                      Setup the global environment in env.jq,
-                       using profile in PROFILE-DIR
+                       using backend data in BACKEND-DATA-DIR
 
     allocate-run RUNDIR
     describe-run RUNDIR
@@ -69,7 +69,7 @@ case "${op}" in
         ;;
 
     assert-stopped )
-        backend is-running &&
+        backend is-running run/current &&
           fatal "backend reports that cluster is already running. Please stop it first:  $(yellow stop-cluster)" ||
           true
         ;;

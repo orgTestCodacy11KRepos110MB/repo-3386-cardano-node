@@ -34,8 +34,8 @@ case "$op" in
                --force ) regenesis_causes+=('has--force');;
                * ) break;; esac; shift; done
 
-        local profile_json=${1:-$WB_SHELL_PROFILE_DIR/profile.json}
-        local node_specs=${2:-$WB_SHELL_PROFILE_DIR/node-specs.json}
+        local profile_json=${1:-$WB_SHELL_PROFILE_DATA/profile.json}
+        local node_specs=${2:-$WB_SHELL_PROFILE_DATA/node-specs.json}
         local cacheDir=${3:-$(envjqr 'cacheDir')}
 
         mkdir -p "$cacheDir" && test -w "$cacheDir" ||
@@ -98,7 +98,8 @@ case "$op" in
             --arg       profile_json $profile_json
             --sort-keys
             --null-input
-            -L "$global_basedir/profiles"
+            -L "$global_basedir/profile"
+            -L "$global_basedir/genesis"
         )
         jq 'include "genesis";
 
@@ -114,7 +115,8 @@ case "$op" in
                                     sha1sum | cut -c-7)
             --slurpfile profile $profile_json
             --raw-output
-            -L "$global_basedir/profiles"
+            -L "$global_basedir/profile"
+            -L "$global_basedir/genesis"
         )
         jq 'include "genesis";
 
@@ -141,11 +143,11 @@ case "$op" in
 
     actually-genesis )
         local usage="USAGE:  wb genesis $op PROFILE-JSON NODE-SPECS DIR"
-        local profile_json=${1:-$WB_SHELL_PROFILE_DIR/profile.json}
-        local node_specs=${2:-$WB_SHELL_PROFILE_DIR/node-specs.json}
+        local profile_json=${1:-$WB_SHELL_PROFILE_DATA/profile.json}
+        local node_specs=${2:-$WB_SHELL_PROFILE_DATA/node-specs.json}
         local dir=${3:-$(mktemp -d)}
-        local cache_key_input=${4:-$(genesis profile-cache-key-input $WB_SHELL_PROFILE_DIR/profile.json)}
-        local cache_key=${5:-$(genesis profile-cache-key $WB_SHELL_PROFILE_DIR/profile.json)}
+        local cache_key_input=${4:-$(genesis profile-cache-key-input $WB_SHELL_PROFILE_DATA/profile.json)}
+        local cache_key=${5:-$(genesis profile-cache-key $WB_SHELL_PROFILE_DATA/profile.json)}
 
         progress "genesis" "new one:  $(yellow profile) $(blue $profile_json) $(yellow node_specs) $(blue $node_specs) $(yellow dir) $(blue $dir) $(yellow cache_key) $(blue $cache_key) $(yellow cache_key_input) $(blue $cache_key_input)"
 
@@ -156,7 +158,7 @@ case "$op" in
            | . * ($p.genesis.shelley // {})
            | . * ($p.genesis.alonzo // {})
            ' --slurpfile prof "$profile_json"  \
-           "$global_basedir"/profiles/presets/mainnet/genesis/genesis.alonzo.json \
+           "$global_basedir"/profile/presets/mainnet/genesis/genesis.alonzo.json \
            >   "$dir"/genesis.alonzo.spec.json
 
         cardano-cli genesis create --genesis-dir "$dir"/ \
@@ -291,7 +293,7 @@ case "$op" in
         jq ' $prof[0] as $p
            | . * ($p.genesis.alonzo // {})
            ' --slurpfile prof       "$profile_json"  \
-           "$global_basedir"/profiles/presets/mainnet/genesis/genesis.alonzo.json \
+           "$global_basedir"/profile/presets/mainnet/genesis/genesis.alonzo.json \
            >   "$dir"/genesis.alonzo.json;;
 
     * ) usage_genesis;; esac

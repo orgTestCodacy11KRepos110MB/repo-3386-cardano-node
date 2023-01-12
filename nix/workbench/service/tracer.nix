@@ -2,17 +2,14 @@
 , runJq
 
 ## An attrset of specific methods and parameters.
-, services-config
-
+, servicesConfig
 , profile
+, nodeSpecs
 }:
 
 with pkgs.lib;
 
 let
-  # We're reusing configuration from a cluster node.
-  nodes = profile.node-services;
-
   ##
   ## nodeSpecsTracerConfig :: Map NodeId NodeSpec -> TracerConfig
   ##
@@ -20,14 +17,14 @@ let
     nodeSpecs:
     let
     in
-        services-config.finaliseTracerService
+        servicesConfig.finaliseTracerService
         {
           ## In both the local and remote scenarios, it's most frequently convenient to act as an acceptor.
           acceptingSocket = "tracer.socket";
 
-          networkMagic = profile.value.genesis.network_magic;
+          networkMagic = profile.genesis.network_magic;
 
-          ## logRoot = ## ..really depends on context -- available in services-config.finaliseTracerService
+          ## logRoot = ## ..really depends on context -- available in servicesConfig.finaliseTracerService
 
           dsmPassthrough = {
             # rtsOpts = ["-xc"];
@@ -108,7 +105,7 @@ let
           '';
       };
     })
-    profile.node-specs.value;
+    nodeSpecs.value;
 in
 {
   inherit tracer-service;

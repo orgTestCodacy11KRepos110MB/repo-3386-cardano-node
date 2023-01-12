@@ -1,5 +1,5 @@
 { lib
-, workbench
+, runWorkbench
 ##
 , stateDir
 , useCabalRun
@@ -10,11 +10,11 @@ with lib;
 {
       ## Generic Nix bits:
       topologyForNodeSpec =
-        { profile, nodeSpec }:
+        { profileName, topologyFiles, nodeSpec }:
         let inherit (nodeSpec) name i; in
-        workbench.runWorkbench
+        runWorkbench
           "topology-${name}.json"
-          "topology projection-for local-${nodeSpec.kind} ${toString i} ${profile.name} ${profile.topology.files} ${toString basePort}";
+          "topology projection-for local-${nodeSpec.kind} ${toString i} ${profileName} ${topologyFiles} ${toString basePort}";
 
       nodePublicIP =
         { i, name, ... }@nodeSpec:

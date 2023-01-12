@@ -2,18 +2,22 @@
 , runJq
 
 ## An attrset of specific methods and parameters.
-, services-config
+, servicesConfig
 
 ## The cardano-node config used as baseline:
 , baseNodeConfig
 
 , profile
+, nodeSpecs
+, topologyFiles
 }:
 
 with pkgs.lib;
 with (import ../lib.nix pkgs.lib);
 
 let
+  profileName = profile.name;
+
   ##
   ## removeLegacyTracingOptions :: NodeConfig -> NodeConfig
   ##
@@ -121,7 +125,7 @@ let
           recursiveUpdate
             (import ./tracing.nix
               { inherit nodeSpec;
-                inherit (profile.value.node) tracer;
+                inherit (profile.node) tracer;
               })
             (removeLegacyTracingOptions cfg);
         iohk-monitoring  = cfg:
@@ -157,10 +161,10 @@ let
             TestAlonzoHardForkAtEpoch  = 0;
             TestBabbageHardForkAtEpoch = 0;
           };
-      }.${profile.value.era};
+      }.${profile.era};
     };
     in
-    services-config.finaliseNodeService profile.value nodeSpec
+    servicesConfig.finaliseNodeService profile nodeSpec
     {
       inherit port;
 
@@ -171,14 +175,14 @@ let
       ##   3. overlay the tracing config
       nodeConfig =
         recursiveUpdate
-          (nodeConfigBits.tracing-transform.${profile.value.node.tracing_backend}
-            (services-config.finaliseNodeConfig nodeSpec
+          (nodeConfigBits.tracing-transform.${profile.node.tracing_backend}
+            (servicesConfig.finaliseNodeConfig nodeSpec
               (recursiveUpdate
                 nodeConfigBits.base
-                (if __hasAttr "preset" profile.value
-                 then readJSONMay (./presets + "/${profile.value.preset}/config.json")
+                (if __hasAttr "preset" profile
+                 then readJSONMay (./presets + "/${profile.preset}/config.json")
                  else nodeConfigBits.era_setup_hardforks))))
-          profile.value.node.verbatim;
+          profile.node.verbatim;
 
       extraArgs =
         (if nodeSpec.shutdown_on_block_synced != null
@@ -265,7 +269,7 @@ let
       };
 
       topology = rec {
-        JSON  = services-config.topologyForNodeSpec { inherit profile nodeSpec; };
+        JSON  = servicesConfig.topologyForNodeSpec { inherit profileName topologyFiles nodeSpec; };
         value = __fromJSON (__readFile JSON);
       };
 
@@ -282,8 +286,7 @@ let
   ##
   ## node-services :: Map NodeName (NodeSpec, ServiceConfig, Service, NodeConfig, Script)
   ##
-  node-services = mapAttrs (_: nodeSpecService)
-    profile.node-specs.value;
+  node-services = mapAttrs (_: nodeSpecService) nodeSpecs;
 in
 {
   inherit node-services;

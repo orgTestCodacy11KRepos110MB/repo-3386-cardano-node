@@ -90,7 +90,7 @@ let
               # Actually always "false", may evolve to a "cloud" flag!
               oneTracerPerNode = false;
             };
-      in pkgs.runCommand "workbench-backend-output-${profileNix.name}-${name}"
+      in pkgs.runCommand "workbench-backend-output-${profileNix.profileName}-${name}"
         ({
           ociImagesJSON = ociImages.JSON;
           inherit nomadJobJSON;
@@ -100,7 +100,12 @@ let
         ln -s $ociImagesJSON                           $out/oci-images.json
         ln -s $nomadJobJSON                            $out/nomad-job.json
         '';
+
+  overlay =
+    proTopo: self: super:
+    {
+    };
 in
 {
-  inherit name useCabalRun extraShellPkgs materialise-profile;
+  inherit name extraShellPkgs materialise-profile overlay useCabalRun;
 }

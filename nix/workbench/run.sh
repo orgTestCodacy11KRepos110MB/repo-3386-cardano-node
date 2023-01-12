@@ -372,11 +372,11 @@ EOF
         local profile_name=${1:?$usage}; shift
         local backend_name=${1:?$usage}; shift
 
-        local profile= topology= genesis_cache_entry= manifest= cabal_mode=
+        local profile_data= topology= genesis_cache_entry= manifest= cabal_mode=
         while test $# -gt 0
         do case "$1" in
                --manifest )            manifest=$2; shift;;
-               --profile )             profile=$2; shift;;
+               --profile-data )        profile_data=$2; shift;;
                --topology )            topology=$2; shift;;
                --genesis-cache-entry ) genesis_cache_entry=$2; shift;;
                --cabal-mode | --cabal ) cabal_mode=t;;
@@ -389,13 +389,13 @@ EOF
         if test -z "$genesis_cache_entry"
         then genesis_cache_entry=$(
                  genesis prepare-cache-entry \
-                     "$profile"/profile.json \
-                  "$profile"/node-specs.json)
+                     "$profile_data"/profile.json \
+                  "$profile_data"/node-specs.json)
         fi
 
         ## 2. allocate time
         progress "run | time" "allocating time:"
-        local timing=$(profile allocate-time "$profile"/profile.json)
+        local timing=$(profile allocate-time "$profile_data"/profile.json)
         profile describe-timing "$timing"
 
         ## 3. decide the tag:
@@ -415,14 +415,14 @@ EOF
             fatal "profile | allocate failed to create writable run directory:  $dir"
 
         ## 5. populate the directory:
-        progress "run | profile" "$(if test -n "$profile"; then echo "pre-supplied ($profile_name):  $profile"; else echo "computed:  $profile_name"; fi)"
-        if test -n "$profile"
+        progress "run | profile" "$(if test -n "$profile_data"; then echo "pre-supplied ($profile_name):  $profile_data"; else echo "computed:  $profile_name"; fi)"
+        if test -n "$profile_data"
         then
-            test "$(jq -r .name $profile/profile.json)" = "$profile_name" ||
-                fatal "profile | allocate incoherence:  --profile $profile/profile.json mismatches '$profile_name'"
-            ln -s "$profile"                 "$dir"/profile
-            cp    "$profile"/profile.json    "$dir"/profile.json
-            cp    "$profile"/node-specs.json "$dir"/node-specs.json
+            test "$(jq -r .name $profile_data/profile.json)" = "$profile_name" ||
+                fatal "profile | allocate incoherence:  --profile-data $profile_data/profile.json mismatches '$profile_name'"
+            ln -s "$profile_data"                 "$dir"/profile
+            cp    "$profile_data"/profile.json    "$dir"/profile.json
+            cp    "$profile_data"/node-specs.json "$dir"/node-specs.json
         else
             fail "Mode no longer supported:  operation without profile/ directory."
         fi
@@ -457,7 +457,7 @@ EOF
         then fail "internal error:  no genesis cache entry"
 
         else genesis derive-from-cache      \
-                     "$profile"             \
+                     "$profile_data"        \
                      "$timing"              \
                      "$genesis_cache_entry" \
                      "$dir"/genesis

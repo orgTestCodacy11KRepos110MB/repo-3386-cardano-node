@@ -1,5 +1,5 @@
-{ pkgs, profile }:
-  pkgs.runCommand "workbench-profile-genesis-cache-${profile.name}"
+{ pkgs, profileName, profileJson, nodeSpecsJson }:
+  pkgs.runCommand "workbench-profile-genesis-cache-${profileName}"
     { requiredSystemFeatures = [ "benchmark" ];
       nativeBuildInputs = with pkgs.haskellPackages; with pkgs;
         [ bash cardano-cli coreutils gnused jq moreutils workbench.workbench ];
@@ -7,8 +7,8 @@
     ''
     mkdir $out
 
-    cache_key_input=$(wb genesis profile-cache-key-input ${profile}/profile.json)
-    cache_key=$(      wb genesis profile-cache-key       ${profile}/profile.json)
+    cache_key_input=$(wb genesis profile-cache-key-input ${profileJson})
+    cache_key=$(      wb genesis profile-cache-key       ${profileJson})
 
     genesis_keepalive() {
       while test ! -e $out/profile; do echo 'genesis_keepalive for Hydra'; sleep 10s; done
@@ -22,8 +22,8 @@
 
     args=(
      genesis actually-genesis
-     ${profile}/profile.json
-     ${profile}/node-specs.json
+     ${profileJson}
+     ${nodeSpecsJson}
      $out
      "$cache_key_input"
      "$cache_key"
@@ -32,5 +32,6 @@
 
     touch done
 
-    ln -s ${profile} $out/profile
+    ln -s ${profileJson}   $out
+    ln -s ${nodeSpecsJson} $out
     ''

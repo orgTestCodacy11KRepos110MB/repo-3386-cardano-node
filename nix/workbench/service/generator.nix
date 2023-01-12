@@ -1,17 +1,19 @@
 { pkgs
-, runJq
+, jsonFilePretty
 
 ## An attrset of specific methods and parameters.
-, services-config
+, servicesConfig
 
 , profile
+, nodeSpecs
+, node-services
 }:
 
 with pkgs.lib;
 
 let
   # We're reusing configuration from a cluster node.
-  exemplarNode = profile.node-services."node-0";
+  exemplarNode = node-services."node-0";
 
   ##
   ## generatorServiceConfig :: Map NodeId NodeSpec -> ServiceConfig
@@ -26,14 +28,14 @@ let
                ShelleyGenesisFile ByronGenesisFile;
            };
     in
-        services-config.finaliseGeneratorService profile.value
+        servicesConfig.finaliseGeneratorService profile
         {
-          inherit (profile.value) era;
+          inherit (profile) era;
 
           targetNodes = __mapAttrs
             (name: { name, port, ...}@nodeSpec:
               { inherit port;
-                ip = let ip = services-config.nodePublicIP nodeSpec; # getPublicIp resources nodes name
+                ip = let ip = servicesConfig.nodePublicIP nodeSpec; # getPublicIp resources nodes name
                      in __trace "generator target:  ${name}/${ip}:${toString port}" ip;
               })
             nodeSpecs;
@@ -42,7 +44,7 @@ let
           localNodeConf = removeAttrs exemplarNode.serviceConfig.value ["executable"];
 
           ## The nodeConfig of the Tx generator itself.
-          nodeConfig = services-config.finaliseGeneratorConfig generatorNodeConfigDefault;
+          nodeConfig = servicesConfig.finaliseGeneratorConfig generatorNodeConfigDefault;
 
           dsmPassthrough = {
             # rtsOpts = ["-xc"];
@@ -51,7 +53,7 @@ let
         //
         ((x: recursiveUpdate x
           { tx_count = __ceil x.tx_count; })
-          (removeAttrs profile.value.generator ["epochs"]));
+          (removeAttrs profile.generator ["epochs"]));
 
   ## Given an env config, evaluate it and produce the node service.
   ## Call the given function on this service.
@@ -94,36 +96,28 @@ let
     in {
       serviceConfig = {
         value = serviceConfig;
-        JSON  = runJq "generator-service-config.json"
-                  ''--null-input --sort-keys
-                    --argjson x '${__toJSON serviceConfig}'
-                  '' "$x";
+        JSON  = jsonFilePretty "generator-service-config.json"
+                (__toJSON serviceConfig);
       };
 
       service = {
         value = service;
-        JSON  = runJq "generator-service.json"
-                  ''--null-input --sort-keys
-                    --argjson x '${__toJSON service}'
-                  '' "$x";
+        JSON  = jsonFilePretty "generator-service.json"
+                (__toJSON service);
       };
 
       nodeConfig = {
         value = service.nodeConfig;
-        JSON  = runJq "generator-config.json"
-                  ''--null-input --sort-keys
-                    --argjson x '${__toJSON service.nodeConfig}'
-                  '' "$x";
+        JSON  = jsonFilePretty "generator-config.json"
+                (__toJSON service.nodeConfig);
       };
 
       runScript = {
         # TODO / FIXME
         # the string '...' is not allowed to refer to a store path (such as '')
         # value = service.decideRunScript service;
-        JSON  = runJq "generator-run-script.json"
-                  ''--null-input
-                    --argjson x '${service.decideRunScript service}'
-                  '' "$x";
+        JSON  = jsonFilePretty "generator-run-script.json"
+                (service.decideRunScript service);
       };
 
       startupScript = rec {
@@ -135,7 +129,7 @@ let
           '';
       };
     })
-    profile.node-specs.value;
+    nodeSpecs;
 in
 {
   inherit generator-service mkGeneratorScript;

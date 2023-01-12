@@ -21,13 +21,13 @@ case "$op" in
         test "$(sleep 0.5s; netstat -pltn 2>/dev/null | grep ':9001 ' | wc -l)" != "0";;
 
     setenv-defaults )
-        local usage="USAGE: wb supervisor $op PROFILE-DIR"
-        local profile_dir=${1:?$usage}
+        local usage="USAGE: wb supervisor $op BACKEND-DIR"
+        local backend_dir=${1:?$usage}
 
         setenvjq    'port_shift_ekg'        100
         setenvjq    'port_shift_prometheus' 200
         setenvjq    'port_shift_rtview'     300
-        setenvjqstr 'supervisor_conf'      "$profile_dir"/supervisor.conf
+        setenvjqstr 'supervisor_conf'      "$backend_dir"/supervisor.conf
         ;;
 
     allocate-run )
