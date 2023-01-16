@@ -627,7 +627,7 @@ runQueryPoolState (AnyConsensusModeParams cModeParams) network poolIds = do
   eInMode <- toEraInMode era cMode
     & hoistMaybe (ShelleyQueryCmdEraConsensusModeMismatch (AnyConsensusMode cMode) anyE)
 
-  let qInMode = QueryInEra eInMode . QueryInShelleyBasedEra sbe $ QueryPoolState $ Just $ Set.fromList poolIds
+  let qInMode = QueryInEra eInMode . QueryInShelleyBasedEra sbe $ QueryPoolState $ Just $ Set.fromList poolIds -- v14
   result <- executeQuery era cModeParams localNodeConnInfo qInMode
   obtainLedgerEraClassConstraints sbe writePoolState result
 
@@ -1227,7 +1227,7 @@ runQueryLeadershipSchedule (AnyConsensusModeParams cModeParams) network
       schedule <- case whichSchedule of
         CurrentEpoch -> do
           serCurrentEpochState <- executeQuery era cModeParams localNodeConnInfo $
-            QueryInEra eInMode $ QueryInShelleyBasedEra sbe (QueryPoolDistribution (Just (Set.singleton poolid)))
+            QueryInEra eInMode $ QueryInShelleyBasedEra sbe (QueryPoolDistribution (Just (Set.singleton poolid))) -- v14
           firstExceptT ShelleyQueryCmdLeaderShipError $ hoistEither
             $ eligibleLeaderSlotsConstaints sbe
             $ currentEpochEligibleLeadershipSlots
