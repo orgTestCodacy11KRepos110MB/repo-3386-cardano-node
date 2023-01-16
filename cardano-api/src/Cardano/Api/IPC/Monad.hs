@@ -24,6 +24,7 @@ import qualified Control.Monad.Oops as OO
 import           Control.Monad.Reader
 import           Control.Monad.Trans.Cont
 import           Control.Monad.Trans.Except
+import           Data.Function ((&))
 import qualified Data.Variant as DV
 
 import           Cardano.Api.Block
@@ -128,16 +129,21 @@ getNtcVersion_ = ExceptT $ LocalStateQueryExpr $ do
   v <- ask
   pure $ Right v
 
--- | Lift a query value into a monadic query expression.
--- Use 'queryExpr' in a do block to construct monadic local state queries.
 queryExpr_ :: ()
+  => e `OO.CouldBe` UnsupportedNtcVersionError
   => QueryInMode mode a
   -> ExceptT (OO.Variant e) (LocalStateQueryExpr block point (QueryInMode mode) r IO) a
-queryExpr_ q = lift $ LocalStateQueryExpr $ ReaderT $ \_ -> ContT $ \f -> pure $
-  Net.Query.SendMsgQuery q $
-    Net.Query.ClientStQuerying
-    { Net.Query.recvMsgResult = f
-    }
+queryExpr_ q = do
+  let minNtcVersion = nodeToClientVersionOf q
+  ntcVersion <- getNtcVersion_
+  if ntcVersion >= minNtcVersion
+    then lift
+      $ LocalStateQueryExpr $ ReaderT $ \_ -> ContT $ \f -> pure $
+        Net.Query.SendMsgQuery q $
+          Net.Query.ClientStQuerying
+          { Net.Query.recvMsgResult = f
+          }
+    else OO.throw $ UnsupportedNtcVersionError minNtcVersion ntcVersion
 
 -- | Lift a query value into a monadic query expression returning Maybe of a result.
 -- This is the same as 'queryExpr' except if the query is not supported by the server, will return Nothing instead
@@ -145,10 +151,13 @@ queryExpr_ q = lift $ LocalStateQueryExpr $ ReaderT $ \_ -> ContT $ \f -> pure $
 maybeQueryExpr_ :: ()
   => QueryInMode mode a
   -> ExceptT (OO.Variant e) (LocalStateQueryExpr block point (QueryInMode mode) r IO) (Maybe a)
-maybeQueryExpr_ q = fmap Just (queryExpr_ q)
+maybeQueryExpr_ q =
+  fmap Just (queryExpr_ q)
+    & OO.catch @UnsupportedNtcVersionError (const (return Nothing))
 
 -- | A monadic expresion that determines what era the node is in.
 determineEraExpr_ :: ()
+  => e `OO.CouldBe` UnsupportedNtcVersionError
   => ConsensusModeParams mode
   -> ExceptT (OO.Variant e) (LocalStateQueryExpr block point (QueryInMode mode) r IO) AnyCardanoEra
 determineEraExpr_ cModeParams =

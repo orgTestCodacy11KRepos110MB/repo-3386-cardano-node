@@ -131,7 +131,6 @@ data ShelleyQueryCmdError
   | ShelleyQueryCmdPoolStateDecodeError DecoderError
   | ShelleyQueryCmdStakeSnapshotDecodeError DecoderError
   | ShelleyQueryCmdUnsupportedNtcVersion !UnsupportedNtcVersionError
-
   deriving Show
 
 renderShelleyQueryCmdError :: ShelleyQueryCmdError -> Text
@@ -229,9 +228,10 @@ runQueryProtocolParameters (AnyConsensusModeParams cModeParams) network mOutFile
                 & OO.hoistMaybe (ShelleyQueryCmdEraConsensusModeMismatch (AnyConsensusMode cMode) anyE)
 
               queryExpr_ (QueryInEra eInMode $ QueryInShelleyBasedEra sbe QueryProtocolParameters)
-                & OO.onLeft (\e -> OO.throw (ShelleyQueryCmdEraMismatch e)))
+                & OO.onLeft (OO.throw .ShelleyQueryCmdEraMismatch))
 
-      & OO.catch @AcquireFailure (\e -> OO.throw $ ShelleyQueryCmdAcquireFailure $ toAcquiringFailure e)
+      & OO.catch @AcquireFailure (OO.throw . ShelleyQueryCmdAcquireFailure . toAcquiringFailure)
+      & OO.catch @UnsupportedNtcVersionError (OO.throw . ShelleyQueryCmdUnsupportedNtcVersion)
 
 
   writeProtocolParameters mOutFile result
@@ -310,6 +310,7 @@ runQueryTip (AnyConsensusModeParams cModeParams) network mOutFile = do
           )
 
           & OO.catch @AcquireFailure (\e -> OO.throw (ShelleyQueryCmdAcquireFailure (toAcquiringFailure e)))
+          & OO.catch @UnsupportedNtcVersionError (\e -> OO.throw (ShelleyQueryCmdUnsupportedNtcVersion e))
 
       mLocalState <- hushM eLocalState $ \e ->
         liftIO . T.hPutStrLn IO.stderr $ "Warning: Local state unavailable: " <> renderShelleyQueryCmdError e
@@ -1036,15 +1037,16 @@ runQueryStakePools (AnyConsensusModeParams cModeParams) network mOutFile = OO.ru
 
         let cMode = consensusModeOnly cModeParams
 
-        eInMode <- pure (toEraInMode era cMode)
-          & OO.onNothing (OO.throw $ ShelleyQueryCmdEraConsensusModeMismatch (AnyConsensusMode cMode) anyE)
+        eInMode <- toEraInMode era cMode
+          & OO.hoistMaybe (ShelleyQueryCmdEraConsensusModeMismatch (AnyConsensusMode cMode) anyE)
 
         sbe <- getSbeInQuery_ $ cardanoEraStyle era
 
-        (queryExpr_ . QueryInEra eInMode $ QueryInShelleyBasedEra sbe QueryStakePools)
+        (queryExpr_ $ QueryInEra eInMode $ QueryInShelleyBasedEra sbe QueryStakePools)
           & OO.onLeft (OO.throw . ShelleyQueryCmdEraMismatch)
     )
     & OO.catch @AcquireFailure (OO.throw . ShelleyQueryCmdAcquireFailure . toAcquiringFailure)
+    & OO.catch @UnsupportedNtcVersionError (OO.throw . ShelleyQueryCmdUnsupportedNtcVersion)
 
   writeStakePools_ mOutFile result
 
@@ -1055,7 +1057,7 @@ writeStakePools_ :: ()
   -> ExceptT (OO.Variant e) IO ()
 writeStakePools_ (Just (OutputFile outFile)) stakePools =
   liftIO (LBS.writeFile outFile (encodePretty stakePools))
-    & OO.onException (\e -> OO.throw (ShelleyQueryCmdWriteFileError (FileIOError outFile e)))
+    & OO.onException (OO.throw . ShelleyQueryCmdWriteFileError . FileIOError outFile)
 
 writeStakePools_ Nothing stakePools =
   forM_ (Set.toList stakePools) $ \poolId ->
@@ -1223,7 +1225,7 @@ runQueryLeadershipSchedule (AnyConsensusModeParams cModeParams) network
       ptclState <- executeQuery era cModeParams localNodeConnInfo ptclStateQuery
       eraHistory <- OO.runOopsInExceptT @ShelleyQueryCmdError $ do
         queryNodeLocalState_ localNodeConnInfo Nothing eraHistoryQuery
-          & OO.catch @AcquireFailure (\e -> OO.throw $ ShelleyQueryCmdAcquireFailure $ toAcquiringFailure e)
+          & OO.catch @AcquireFailure (OO.throw . ShelleyQueryCmdAcquireFailure . toAcquiringFailure)
       let eInfo = toEpochInfo eraHistory
       let currentEpochQuery = QueryInEra eInMode $ QueryInShelleyBasedEra sbe QueryEpoch
       curentEpoch <- executeQuery era cModeParams localNodeConnInfo currentEpochQuery
@@ -1345,7 +1347,8 @@ executeQuery era cModeP localNodeConnInfo q = do
   case eraInMode of
     ByronEraInByronMode -> left ShelleyQueryCmdByronEra
     _ -> OO.runOopsInExceptT @ShelleyQueryCmdError $
-      OO.catch @AcquireFailure (\e -> OO.throw $ ShelleyQueryCmdAcquireFailure $ toAcquiringFailure e) $
+      OO.catch @AcquireFailure (OO.throw . ShelleyQueryCmdAcquireFailure . toAcquiringFailure) $
+      OO.catch @UnsupportedNtcVersionError (OO.throw . ShelleyQueryCmdUnsupportedNtcVersion) $
       executeLocalStateQueryExpr_ localNodeConnInfo Nothing $ do
             result <- queryExpr_ q
             case result of
