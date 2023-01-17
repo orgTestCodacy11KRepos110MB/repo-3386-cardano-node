@@ -168,6 +168,8 @@ let
     {
       inherit port;
 
+      eventlog = mkForce true;
+
       ## For the definition of 'nodeConfigBits', please see above.
       ## Meaning:
       ##   1. take the common base
