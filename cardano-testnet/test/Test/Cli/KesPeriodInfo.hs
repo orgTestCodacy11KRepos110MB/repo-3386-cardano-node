@@ -48,7 +48,7 @@ hprop_kes_period_info = integration . H.runFinallies . H.workspace "chairman" $ 
 
   conf@Conf { tempBaseAbsPath, tempAbsPath }
     <- H.noteShowM $ mkConf (ProjectBase base) (YamlFilePath configurationTemplate)
-                              tempAbsBasePath' Nothing
+                              (TmpPath tempAbsBasePath') Nothing
 
   let fastTestnetOptions = CardanoOnlyTestnetOptions $ cardanoDefaultTestnetOptions
                              { cardanoBftNodeOptions = replicate 1 cardanoDefaultTestnetNodeOptions

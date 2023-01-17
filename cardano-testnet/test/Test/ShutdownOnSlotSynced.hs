@@ -31,7 +31,7 @@ hprop_shutdownOnSlotSynced = integration . H.runFinallies . H.workspace "chairma
   baseDir <- H.note =<< H.noteIO . IO.canonicalizePath =<< H.getProjectBase
   configTemplate <- H.noteShow $ baseDir </> "configuration/defaults/byron-mainnet/configuration.yaml"
   conf <- H.noteShowM $
-    mkConf (ProjectBase baseDir) (YamlFilePath configTemplate) tempAbsBasePath' Nothing
+    mkConf (ProjectBase baseDir) (YamlFilePath configTemplate) (TmpPath tempAbsBasePath') Nothing
   let maxSlot = 1500
       slotLen = 0.01
   let fastTestnetOptions = CardanoOnlyTestnetOptions $ cardanoDefaultTestnetOptions

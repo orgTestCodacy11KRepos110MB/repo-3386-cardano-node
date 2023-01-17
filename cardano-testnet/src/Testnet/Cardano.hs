@@ -56,6 +56,7 @@ import qualified Hedgehog.Extras.Test.Network as H
 import qualified System.Directory as IO
 import qualified System.Info as OS
 import qualified Testnet.Util.Assert as H
+import           Testnet.Util.Cli
 import qualified Testnet.Util.Process as H
 import           Testnet.Util.Process (execCli_)
 import           Testnet.Util.Runtime as TR (NodeLoggingFormat (..), PaymentKeyPair (..),
@@ -177,8 +178,6 @@ cardanoTestnet testnetOptions H.Conf {..} = do
   nodeToPort <- H.noteShow (M.fromList (L.zip allNodeNames allPorts))
 
   let securityParam = 10
-
-  H.createDirectoryIfMissing logDir
 
   H.readFile configurationTemplate >>= H.writeFile configurationFile
 
@@ -470,16 +469,12 @@ cardanoTestnet testnetOptions H.Conf {..} = do
 
     poolNodeKeysColdVkey <- H.note $ tempAbsPath </> "node-pool" <> show i <> "/shelley/operator.vkey"
     poolNodeKeysColdSkey <- H.note $ tempAbsPath </> "node-pool" <> show i <> "/shelley/operator.skey"
-    poolNodeKeysVrfVkey <- H.note $ tempAbsPath </> node </> "shelley/vrf.vkey"
-    poolNodeKeysVrfSkey <- H.note $ tempAbsPath </> node </> "shelley/vrf.skey"
     poolNodeKeysStakingVkey <- H.note $ tempAbsPath </> node </> "shelley/staking.vkey"
     poolNodeKeysStakingSkey <- H.note $ tempAbsPath </> node </> "shelley/staking.skey"
 
-    execCli_
-      [ "node", "key-gen-VRF"
-      , "--verification-key-file", poolNodeKeysVrfVkey
-      , "--signing-key-file", poolNodeKeysVrfSkey
-      ]
+    poolNodeKeysVrfVkey <- H.note $ tempAbsPath </> node </> "shelley/vrf.vkey"
+    poolNodeKeysVrfSkey <- H.note $ tempAbsPath </> node </> "shelley/vrf.skey"
+    cliNodeKeyGenVrf tempAbsPath $ KeyNames (node </> "shelley/vrf.vkey") (node </> "shelley/vrf.skey")
 
     return PoolNodeKeys
       { TR.poolNodeKeysColdVkey
@@ -500,11 +495,7 @@ cardanoTestnet testnetOptions H.Conf {..} = do
 
   -- Make hot keys and for all nodes
   forM_ allNodeNames $ \node -> do
-    execCli_
-      [ "node", "key-gen-KES"
-      , "--verification-key-file", tempAbsPath </> node </> "shelley/kes.vkey"
-      , "--signing-key-file",      tempAbsPath </> node </> "shelley/kes.skey"
-      ]
+    cliNodeKeyGenKes tempAbsPath $ KeyNames (node </> "shelley/kes.vkey") (node </> "shelley/kes.skey")
 
     execCli_
       [ "node", "issue-op-cert"
@@ -535,35 +526,13 @@ cardanoTestnet testnetOptions H.Conf {..} = do
     let paymentVKey = tempAbsPath </> "addresses/" <> addr <> ".vkey"
 
     -- Payment address keys
-    execCli_
-      [ "address", "key-gen"
-      , "--verification-key-file", paymentVKey
-      , "--signing-key-file", paymentSKey
-      ]
+    -- TODO !
 
-    execCli_
-      [ "address", "key-gen"
-      , "--verification-key-file", tempAbsPath </> "shelley/utxo-keys/utxo2.vkey"
-      , "--signing-key-file", tempAbsPath </> "shelley/utxo-keys/utxo2.skey"
-      ]
-
-    execCli_
-      [ "stake-address", "key-gen"
-      , "--verification-key-file", tempAbsPath </> "addresses/" <> addr <> "-stake.vkey"
-      , "--signing-key-file", tempAbsPath </> "addresses/" <> addr <> "-stake.skey"
-      ]
-
-    execCli_
-      [ "stake-address", "key-gen"
-      , "--verification-key-file", tempAbsPath </> "shelley/utxo-keys/utxo-stake.vkey"
-      , "--signing-key-file", tempAbsPath </> "shelley/utxo-keys/utxo-stake.skey"
-      ]
-
-    execCli_
-      [ "stake-address", "key-gen"
-      , "--verification-key-file", tempAbsPath </> "shelley/utxo-keys/utxo2-stake.vkey"
-      , "--signing-key-file", tempAbsPath </> "shelley/utxo-keys/utxo2-stake.skey"
-      ]
+    cliAddressKeyGen tempAbsPath $ KeyNames ("addresses" </> addr <> ".vkey") ("addresses" </> addr <> ".skey")
+    cliAddressKeyGen tempAbsPath $ KeyNames "shelley/utxo-keys/utxo2.vkey" "shelley/utxo-keys/utxo2.skey"
+    cliStakeAddressKeyGen tempAbsPath $ KeyNames ("addresses" </> addr <> "-stake.vkey") ("addresses" </> addr <> "-stake.skey")
+    cliStakeAddressKeyGen tempAbsPath $ KeyNames "shelley/utxo-keys/utxo-stake.vkey" "shelley/utxo-keys/utxo-stake.skey"
+    cliStakeAddressKeyGen tempAbsPath $ KeyNames "shelley/utxo-keys/utxo2-stake.vkey" "shelley/utxo-keys/utxo2-stake.skey"
 
     -- Payment addresses
     execCli_

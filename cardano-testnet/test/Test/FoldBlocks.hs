@@ -41,7 +41,7 @@ prop_foldBlocks = U.integration . H.runFinallies . H.workspace "chairman" $ \tem
   configTemplate <- H.noteShow $ base </> "configuration/defaults/byron-mainnet/configuration.yaml"
   conf <- HE.noteShowM $
     TN.mkConf (TN.ProjectBase base) (TN.YamlFilePath configTemplate)
-      (tempAbsBasePath' <> "/")
+      (TmpPath $ tempAbsBasePath' <> "/")
       Nothing
 
   let options = CardanoOnlyTestnetOptions $ cardanoDefaultTestnetOptions

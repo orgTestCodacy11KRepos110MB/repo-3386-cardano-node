@@ -49,7 +49,7 @@ hprop_leadershipSchedule = integration . H.runFinallies . H.workspace "alonzo" $
   base <- H.note =<< H.noteIO . IO.canonicalizePath =<< H.getProjectBase
   configurationTemplate <- H.noteShow $ base </> "configuration/defaults/byron-mainnet/configuration.yaml"
   conf@Conf { tempBaseAbsPath, tempAbsPath } <- H.noteShowM $
-    mkConf (ProjectBase base) (YamlFilePath configurationTemplate) tempAbsBasePath' Nothing
+    mkConf (ProjectBase base) (YamlFilePath configurationTemplate) (TmpPath tempAbsBasePath') Nothing
 
   work <- H.note $ tempAbsPath </> "work"
   H.createDirectoryIfMissing work

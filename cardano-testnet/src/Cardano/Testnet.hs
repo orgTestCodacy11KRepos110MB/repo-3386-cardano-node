@@ -21,6 +21,7 @@ module Cardano.Testnet (
   Conf(..),
   ProjectBase(..),
   YamlFilePath(..),
+  TmpPath(..),  
   mkConf,
 
   -- * Processes

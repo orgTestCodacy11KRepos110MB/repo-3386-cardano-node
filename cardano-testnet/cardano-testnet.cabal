@@ -66,6 +66,7 @@ library
                         Testnet.Byron
                         Testnet.Util.Assert
                         Testnet.Util.Base
+                        Testnet.Util.Cli
                         Testnet.Util.Ignore
                         Testnet.Util.Process
                         Testnet.Util.Runtime

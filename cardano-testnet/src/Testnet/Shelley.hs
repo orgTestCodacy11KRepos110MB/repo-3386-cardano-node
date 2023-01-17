@@ -50,8 +50,11 @@ import qualified Hedgehog.Extras.Test.Network as H
 import qualified Hedgehog.Extras.Test.Process as H
 import qualified System.Directory as IO
 import qualified System.Info as OS
+
 import qualified Testnet.Conf as H
+import           Testnet.Conf (TmpPath(..))
 import qualified Testnet.Util.Base as H
+import           Testnet.Util.Cli
 import qualified Testnet.Util.Process as H
 import           Testnet.Util.Process (execCli_)
 import           Testnet.Util.Runtime hiding (allNodes)
@@ -218,11 +221,8 @@ shelleyTestnet testnetOptions H.Conf {..} = do
       , "--operational-certificate-issue-counter-file", tempAbsPath </> n </> "operator.counter"
       ]
 
-    execCli_
-      [ "node", "key-gen-VRF"
-      , "--verification-key-file", tempAbsPath </> n </> "vrf.vkey"
-      , "--signing-key-file", tempAbsPath </> n </> "vrf.skey"
-      ]
+    cliNodeKeyGenVrf tempAbsPath $ KeyNames (n </> "vrf.vkey") (n </> "vrf.skey")
+
   -- Symlink the BFT operator keys from the genesis delegates, for uniformity
   forM_ praosNodesN $ \n -> do
     H.createFileLink (tempAbsPath </> "delegate-keys/delegate" <> n <> ".skey") (tempAbsPath </> "node-praos" <> n </> "operator.skey")
@@ -233,11 +233,7 @@ shelleyTestnet testnetOptions H.Conf {..} = do
 
   --  Make hot keys and for all nodes
   forM_ allNodes $ \node -> do
-    execCli_
-      [ "node", "key-gen-KES"
-      , "--verification-key-file", tempAbsPath </> node </> "kes.vkey"
-      , "--signing-key-file", tempAbsPath </> node </> "kes.skey"
-      ]
+    cliNodeKeyGenKes tempAbsPath $ KeyNames (node </> "key.vkey") (node </> "key.skey")
 
     execCli_
       [ "node", "issue-op-cert"
@@ -268,18 +264,13 @@ shelleyTestnet testnetOptions H.Conf {..} = do
 
   forM_ addrs $ \addr -> do
     -- Payment address keys
-    execCli_
-      [ "address", "key-gen"
-      , "--verification-key-file", tempAbsPath </> "addresses/" <> addr <> ".vkey"
-      , "--signing-key-file", tempAbsPath </> "addresses/" <> addr <> ".skey"
-      ]
+    cliAddressKeyGen tempAbsPath $ KeyNames ("addresses" </> addr <> ".vkey") ("addresses" </> addr <> ".skey")
 
     -- Stake address keys
-    execCli_
-      [ "stake-address", "key-gen"
-      , "--verification-key-file", tempAbsPath </> "addresses/" <> addr <> "-stake.vkey"
-      , "--signing-key-file", tempAbsPath </> "addresses/" <> addr <> "-stake.skey"
-      ]
+    cliStakeAddressKeyGen tempAbsPath
+      $ KeyNames
+          ("addresses" </> addr <> "-stake.vkey")
+          ("addresses" </> addr <> "-stake.skey")
 
     -- Payment addresses
     execCli_
@@ -393,8 +384,6 @@ shelleyTestnet testnetOptions H.Conf {..} = do
   --------------------------------
   -- Launch cluster of three nodes
 
-  H.createDirectoryIfMissing logDir
-
   H.readFile (base </> "configuration/chairman/shelley-only/configuration.yaml")
     <&> L.unlines . fmap (rewriteConfiguration (shelleyEnableP2P testnetOptions)) . L.lines
     >>= H.writeFile (tempAbsPath </> "configuration.yaml")
@@ -440,7 +429,7 @@ hprop_testnet :: H.Property
 hprop_testnet = H.integration . H.runFinallies . H.workspace "chairman" $ \tempAbsPath' -> do
   base <- H.note =<< H.noteIO . IO.canonicalizePath =<< H.getProjectBase
   configurationTemplate <- H.noteShow $ base </> "configuration/defaults/byron-mainnet/configuration.yaml"
-  conf <- H.mkConf (H.ProjectBase base) (H.YamlFilePath configurationTemplate) tempAbsPath' Nothing
+  conf <- H.mkConf (H.ProjectBase base) (H.YamlFilePath configurationTemplate) (TmpPath tempAbsPath') Nothing
 
   void . liftResourceT . resourceForkIO . forever . liftIO $ IO.threadDelay 10000000
 
