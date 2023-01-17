@@ -128,17 +128,17 @@ hprop_kes_period_info = integration . H.runFinallies . H.workspace "chairman" $ 
                                 ]
 
   poolowneraddresswstakecred <- execCli [ "address", "build"
-                                          , "--payment-verification-key-file", poolownerverkey
-                                          , "--stake-verification-key-file",  poolownerstakekey
-                                          , "--testnet-magic", show @Int testnetMagic
-                                          ]
+                                        , "--payment-verification-key-file", poolownerverkey
+                                        , "--stake-verification-key-file",  poolownerstakekey
+                                        , "--testnet-magic", show @Int testnetMagic
+                                        ]
   poolcoldVkey <- H.note $ tempAbsPath </> "node-pool1/shelley/operator.vkey"
   poolcoldSkey <- H.note $ tempAbsPath </> "node-pool1/shelley/operator.skey"
 
   stakePoolId <- filter ( /= '\n') <$>
                    execCli [ "stake-pool", "id"
-                             , "--cold-verification-key-file", poolcoldVkey
-                             ]
+                           , "--cold-verification-key-file", poolcoldVkey
+                           ]
 
   -- REGISTER PLEDGER POOL
 
@@ -217,9 +217,9 @@ hprop_kes_period_info = integration . H.runFinallies . H.workspace "chairman" $ 
   txinForStakeReg <- H.noteShow =<< H.headM (Map.keys utxoWithStaking1)
 
   void $ execCli [ "stake-address", "registration-certificate"
-                   , "--stake-verification-key-file", utxoStakingVkey2
-                   , "--out-file", work </> "stakekey.regcert"
-                   ]
+                 , "--stake-verification-key-file", utxoStakingVkey2
+                 , "--out-file", work </> "stakekey.regcert"
+                 ]
 
   void $ execCli' execConfig
     [ "transaction", "build"
