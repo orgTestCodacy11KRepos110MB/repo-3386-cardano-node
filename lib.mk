@@ -35,6 +35,6 @@ $$(foreach prof,$(1),$$(eval $$(call proftgt,$$(prof)-nix,        $$(prof), true
 $$(foreach prof,$(1),$$(eval $$(call proftgt,$$(prof)-autonix,    $$(prof), true,false, true,false,false, supervisor)))
 $$(foreach prof,$(1),$$(eval $$(call proftgt,$$(prof)-nomad,      $$(prof), true,false,false,false,false, nomad)))
 $$(foreach prof,$(1),$$(eval $$(call proftgt,$$(prof)-autonomad,  $$(prof), true,false, true,false,false, nomad)))
-$$(foreach prof,$(1),$$(eval $$(call proftgt,$$(prof)-nixops,     $$(prof), true,false,false,false,false, nixops)))
-$$(foreach prof,$(1),$$(eval $$(call proftgt,$$(prof)-autonixops, $$(prof), true,false, true, true,false, nixops)))
+$$(foreach prof,$(1),$$(eval $$(call proftgt,$$(prof)-nixops,     $$(prof), true, true,false,false,false, nixops)))
+$$(foreach prof,$(1),$$(eval $$(call proftgt,$$(prof)-autonixops, $$(prof), true, true, true, true,false, nixops)))
 endef

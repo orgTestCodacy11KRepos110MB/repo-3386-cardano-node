@@ -134,7 +134,7 @@ start()
 {
     local batch_name=
     local profile_data=
-    local backend=${WB_BACKEND:-supervisor} backend_data=
+    local backend_data=
     local node_source=.
     local node_rev=
     local cabal_mode=
@@ -175,8 +175,6 @@ start()
         --node-rev )                     node_rev=$2; shift;;
         --cabal-mode | --cabal )         run_allocate_args+=($1); cabal_mode=t;;
         --skip-prebuild | -sp )          skip_prebuild=t;;
-        --supervisor | --backend-supervisor )
-                                         backend=supervisor;;
 
         --verbose | -v )                 export verbose=t;;
         --trace | --debug )              set -x;;
@@ -190,7 +188,7 @@ start()
     then . $(dirname "$0")/lib-cabal.sh
     fi
 
-    backend assert-is $backend
+    backend validate
     backend assert-stopped
     backend setenv-defaults "$backend_data"
 
@@ -217,7 +215,7 @@ start()
        local args=(
             ${run_allocate_args[@]}
             --manifest "$manifest"
-        )
+       )
        run ${run_args[@]} 'allocate' $batch_name $profile_name $backend "${args[@]}"
        local run=$(run current-tag)
 

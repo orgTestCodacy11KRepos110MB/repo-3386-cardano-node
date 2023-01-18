@@ -1,15 +1,19 @@
-let nix = import ../../..
-  { localCluster = {
-      profileName = (__fromJSON (__readFile <profileJson>)).name;
-      backendName = "nixops";
-      useCabalRun = false;
+let
+  ## IFD:
+  profile = __fromJSON (__readFile <profileJson>);
+  nix = import ../../..
+    { localCluster = {
+        profileName = profile.name;
+        backendName = "nixops";
+        useCabalRun = false;
+        workbenchDevMode = true;
+      };
+      withHoogle = false;
     };
-    withHoogle = false;
-  };
 in
 with nix;
 
-import ./cardano.nix {
+import ./deployment.nix {
   instances = with iohk-ops-lib.physical.libvirtd; {
     inherit targetEnv;
     core-node   = medium;

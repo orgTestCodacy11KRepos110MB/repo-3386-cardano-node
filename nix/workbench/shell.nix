@@ -26,6 +26,7 @@ let
 
       echo 'workbench shellHook:  profileName=${profileName} backendName=${backend.name} useCabalRun=${toString backend.useCabalRun} workbenchDevMode=${toString workbenchDevMode} profiled=${toString profiled} '
       export WB_BACKEND=${backend.name}
+      export WB_DEPLOYMENT_NAME=''${WB_DEPLOYMENT_NAME:-$(basename $(pwd))}
       export WB_SHELL_PROFILE=${profileName}
       export WB_SHELL_PROFILE_DATA=${profileNix}
 
@@ -105,9 +106,9 @@ in project.shellFor {
     pkgs.moreutils
     pkgs.pstree
     pkgs.time
-    workbenchRunner.interactive-start
-    workbenchRunner.interactive-stop
-    workbenchRunner.interactive-restart
+    workbench-interactive-start
+    workbench-interactive-stop
+    workbench-interactive-restart
   ]
   # Backend packages take precendence.
   ++ backend.extraShellPkgs
@@ -121,7 +122,7 @@ in project.shellFor {
   ]
   ++ lib.optional haveGlibcLocales pkgs.glibcLocales
   ++ lib.optionals (!backend.useCabalRun) [ cardano-topology cardano-cli locli ]
-  ++ lib.optionals (!workbenchDevMode) [ workbenchRunner.workbench.workbench ]
+  ++ lib.optionals (!workbenchDevMode) [ workbench.workbench ]
   ;
 
 } // { inherit shellHook;

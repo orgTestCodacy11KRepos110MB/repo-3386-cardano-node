@@ -6,36 +6,30 @@ with pkgs;
 with lib;
 let
 
-  inherit (globals) topology byronProxyPort;
-  inherit (topology) coreNodes relayNodes;
-  privateRelayNodes = topology.privateRelayNodes or [];
-  inherit (lib) recursiveUpdate mapAttrs listToAttrs imap1 concatLists;
-
   cardanoNodes = listToAttrs (concatLists [
-    (map mkCoreNode coreNodes)
-    (map mkRelayNode (relayNodes ++ privateRelayNodes))
+    (map mkCoreNode  globals.topology.coreNodes)
+    # (map mkRelayNode globals.topology.relayNodes)
   ]);
-
-  nodes = cardanoNodes;
 
   mkCoreNode =  def:
   {
     inherit (def) name;
     value = mkNode {
-      _file = ./cardano.nix;
-      node = {
-        inherit (def) org nodeId;
-        roles = {
-          isCardanoCore = true;
-          class = "pool";
-        };
-      };
-      deployment.ec2.region = def.region;
+      _file = ./deployment.nix;
       imports = [
         (def.instance or instances.core-node)
         (cardano-ops.roles.core def.nodeId)
       ];
+      node = {
+        roles = {
+          isCardanoCore = true;
+          class = "pool";
+        };
+        inherit (def) org nodeId;
+      };
       services.cardano-node.allProducers = def.producers;
+      deployment.ec2.region = def.region;
+      security.wrappers.unix_chkpwd.source = mkForce "${pkgs.pam}/bin/unix_chkpwd";
     } def;
   };
 
@@ -43,7 +37,11 @@ let
   {
     inherit (def) name;
     value = mkNode {
-      _file = ./cardano.nix;
+      _file = ./deployment.nix;
+      imports = [
+        (def.instance or instances.relay-node)
+        cardano-ops.roles.relay
+      ];
       node = {
         roles = {
           isCardanoRelay = true;
@@ -53,9 +51,6 @@ let
       };
       services.cardano-node.allProducers = def.producers;
       deployment.ec2.region = def.region;
-      imports =
-        [(def.instance or instances.relay-node)
-         cardano-ops.roles.relay];
     } def;
   };
 
@@ -84,9 +79,6 @@ let
       ]);
 
 in {
-  network.description =
-    globals.networkName
-      or
-    "Cardano cluster - ${globals.deploymentName}";
+  network.description = globals.networkName;
   network.enableRollback = true;
-} // nodes
+} // cardanoNodes

@@ -1,4 +1,6 @@
-pkgs: { config, name, lib, nodes, resources, ... }:
+pkgs:
+profileNix:
+{ config, name, lib, nodes, resources, ... }:
 with pkgs; with pkgs.lib;
 
 let
@@ -26,6 +28,7 @@ let
     optionalAttrs (hasAttr attr (node-cfg.nodeConfig)) { ${attr} = node-cfg.nodeConfig.${attr}; };
 in {
   imports = [
+    cardano-ops.modules.common
     (import (node-src + "/nix/nixos/tx-generator-service.nix")
       ## XXX: ugly -- svclib should really move to iohk-nix.
       (pkgs
@@ -33,182 +36,189 @@ in {
        { commonLib = import (node-src + "/nix/svclib.nix") { inherit pkgs; }; }))
   ];
 
-  services.tx-generator = rec {
-    enable = true;
-    targetNodes = __mapAttrs
-      (name: node:
-        { ip   = let ip = getPublicIp resources nodes name;
-                 in __trace "generator target:  ${name}/${ip}" ip;
-          port = node.config.services.cardano-node.port;
-        })
-      poolNodes;
+  services.tx-generator =
+    profileNix.generator-service.serviceConfig.value;
+  # rec {
+  #   enable = true;
+  #   targetNodes = __mapAttrs
+  #     (name: node:
+  #       { ip   = let ip = getPublicIp resources nodes name;
+  #                in __trace "generator target:  ${name}/${ip}" ip;
+  #         port = node.config.services.cardano-node.port;
+  #       })
+  #     poolNodes;
 
-    ## nodeConfig of the locally running observer node.
-    localNodeConf = node-cfg;
-    localNodeSocketPath = node-cfg.socketPath 0;
-    sigKey = "/var/lib/keys/cardano-node-signing";
+  #   ## nodeConfig of the locally running observer node.
+  #   localNodeConf = node-cfg;
+  #   localNodeSocketPath = node-cfg.socketPath 0;
+  #   sigKey = "/var/lib/keys/cardano-node-signing";
 
-    ## The nodeConfig of the Tx generator itself.
-    nodeConfig =
-      finaliseNodeConfig
-        globals.profile.value.node.withNewTracing
-    {
-      TurnOnLogging    = true;
-      TurnOnLogMetrics = false;
-      minSeverity = "Debug";
-      TracingVerbosity = "MaximalVerbosity";
-      defaultBackends = [
-        "KatipBK"
-      ];
-      setupBackends = [
-        "KatipBK"
-      ];
-      defaultScribes = [
-        [ "StdoutSK" "stdout" ]
-        [ "FileSK"   "logs/generator.json" ]
-      ];
-      setupScribes = [
-        { scKind = "StdoutSK"; scName = "stdout"; scFormat = "ScJson"; }
-        { scKind = "FileSK"; scName = "logs/generator.json"; scFormat = "ScJson";
-          scRotation = {
-            rpLogLimitBytes = 300000000;
-            rpMaxAgeHours   = 24;
-            rpKeepFilesNum  = 20;
-          }; }
-      ];
-      options = {
-      };
-    } // __foldl' (x: y: x // y) {}
-      (map mayFetchNodeCfgAttr
-        [ "ByronGenesisFile"
-          "ShelleyGenesisFile"
-          "AlonzoGenesisFile"
-          "Protocol"
-          "LastKnownBlockVersion-Major"
-          "LastKnownBlockVersion-Minor"
-          "LastKnownBlockVersion-Alt"
-          "TestEnableDevelopmentHardForkEras"
-          "TestEnableDevelopmentNetworkProtocols"
-          "TestShelleyHardForkAtEpoch"
-          "TestAllegraHardForkAtEpoch"
-          "TestMaryHardForkAtEpoch"
-          "TestAlonzoHardForkAtEpoch"
-          "TestBabbageHardForkAtEpoch" ]);
-    nodeConfigFile = __toFile "generator-config.json" (__toJSON nodeConfig);
+  #   ## The nodeConfig of the Tx generator itself.
+  #   nodeConfig =
+  #     finaliseNodeConfig
+  #       globals.profile.value.node.withNewTracing
+  #   {
+  #     TurnOnLogging    = true;
+  #     TurnOnLogMetrics = false;
+  #     minSeverity = "Debug";
+  #     TracingVerbosity = "MaximalVerbosity";
+  #     defaultBackends = [
+  #       "KatipBK"
+  #     ];
+  #     setupBackends = [
+  #       "KatipBK"
+  #     ];
+  #     defaultScribes = [
+  #       [ "StdoutSK" "stdout" ]
+  #       [ "FileSK"   "logs/generator.json" ]
+  #     ];
+  #     setupScribes = [
+  #       { scKind = "StdoutSK"; scName = "stdout"; scFormat = "ScJson"; }
+  #       { scKind = "FileSK"; scName = "logs/generator.json"; scFormat = "ScJson";
+  #         scRotation = {
+  #           rpLogLimitBytes = 300000000;
+  #           rpMaxAgeHours   = 24;
+  #           rpKeepFilesNum  = 20;
+  #         }; }
+  #     ];
+  #     options = {
+  #     };
+  #   } // __foldl' (x: y: x // y) {}
+  #     (map mayFetchNodeCfgAttr
+  #       [ "ByronGenesisFile"
+  #         "ShelleyGenesisFile"
+  #         "AlonzoGenesisFile"
+  #         "Protocol"
+  #         "LastKnownBlockVersion-Major"
+  #         "LastKnownBlockVersion-Minor"
+  #         "LastKnownBlockVersion-Alt"
+  #         "TestEnableDevelopmentHardForkEras"
+  #         "TestEnableDevelopmentNetworkProtocols"
+  #         "TestShelleyHardForkAtEpoch"
+  #         "TestAllegraHardForkAtEpoch"
+  #         "TestMaryHardForkAtEpoch"
+  #         "TestAlonzoHardForkAtEpoch"
+  #         "TestBabbageHardForkAtEpoch" ]);
+  #   nodeConfigFile = __toFile "generator-config.json" (__toJSON nodeConfig);
 
-    dsmPassthrough = {
-      # rtsOpts = ["-xc"];
-    };
-  } // globals.environmentConfig.generatorConfig;
+  #   dsmPassthrough = {
+  #     # rtsOpts = ["-xc"];
+  #   };
+  # }
+  # // globals.environmentConfig.generatorConfig;
 
-  services.cardano-tracer = {
-    enable = true;
-    acceptingSocket = (node-cfg.stateDir 0) + "/tracer.socket";
-    logRoot = node-cfg.stateDir 0;
-  };
-  systemd.services.cardano-tracer.serviceConfig.Environment = [("HOME=" + node-cfg.stateDir 0)];
+  services.cardano-tracer =
+    profileNix.tracer-service.nixos-service-config.value;
+  # services.cardano-tracer = {
+  #   enable = true;
+  #   acceptingSocket = (node-cfg.stateDir 0) + "/tracer.socket";
+  #   logRoot = node-cfg.stateDir 0;
+  # };
+  # systemd.services.cardano-tracer.serviceConfig.Environment = [("HOME=" + node-cfg.stateDir 0)];
 
-  services.cardano-node = {
-    instances = 1;
+  services.cardano-node =
+    profileNix.node-service."node-0".serviceConfig.value;
+  # {
+  #   instances = 1;
 
-    socketPath = "/var/lib/cardano-node/node.socket";
-    systemdSocketActivation = mkForce false;
+  #   socketPath = "/var/lib/cardano-node/node.socket";
+  #   systemdSocketActivation = mkForce false;
 
-    nodeConfig =
-      finaliseNodeConfig
-        globals.profile.value.node.withNewTracing
-        (mkForce
-          (globals.environmentConfig.nodeConfig //
-           {
-             defaultScribes = [
-               [ "StdoutSK" "stdout" ]
-               [ "FileSK"   "logs/node.json" ]
-             ];
-             setupScribes = [
-               { scKind = "StdoutSK"; scName = "stdout"; scFormat = "ScJson"; }
-               { scKind = "FileSK"; scName = "logs/node.json"; scFormat = "ScJson";
-                 scRotation = {
-                   rpLogLimitBytes = 300000000;
-                   rpMaxAgeHours   = 24;
-                   rpKeepFilesNum  = 20;
-                 }; }
-             ];
-             minSeverity = "Debug";
-             TracingVerbosity = "NormalVerbosity";
+  #   nodeConfig =
+  #     finaliseNodeConfig
+  #       globals.profile.value.node.withNewTracing
+  #       (mkForce
+  #         (globals.environmentConfig.nodeConfig //
+  #          {
+  #            defaultScribes = [
+  #              [ "StdoutSK" "stdout" ]
+  #              [ "FileSK"   "logs/node.json" ]
+  #            ];
+  #            setupScribes = [
+  #              { scKind = "StdoutSK"; scName = "stdout"; scFormat = "ScJson"; }
+  #              { scKind = "FileSK"; scName = "logs/node.json"; scFormat = "ScJson";
+  #                scRotation = {
+  #                  rpLogLimitBytes = 300000000;
+  #                  rpMaxAgeHours   = 24;
+  #                  rpKeepFilesNum  = 20;
+  #                }; }
+  #            ];
+  #            minSeverity = "Debug";
+  #            TracingVerbosity = "NormalVerbosity";
 
-             TestEnableDevelopmentHardForkEras = true;
-             TestEnableDevelopmentNetworkProtocols = true;
+  #            TestEnableDevelopmentHardForkEras = true;
+  #            TestEnableDevelopmentNetworkProtocols = true;
 
-             TraceAcceptPolicy                 = false;
-             TraceBlockFetchClient             = true;
-             TraceBlockFetchDecisions          = false;
-             TraceBlockFetchProtocol           = true;
-             TraceBlockFetchProtocolSerialised = false;
-             TraceBlockFetchServer             = false;
-             TraceBlockchainTime               = false;
-             TraceChainDB                      = true;
-             TraceChainSyncBlockServer         = false;
-             TraceChainSyncClient              = true;
-             TraceChainSyncHeaderServer        = false;
-             TraceChainSyncProtocol            = false;
-             TraceDiffusionInitialization      = false;
-             TraceDnsResolver                  = false;
-             TraceDnsSubscription              = false;
-             TraceErrorPolicy                  = true;
-             TraceForge                        = false;
-             TraceForgeStateInfo               = false;
-             TraceHandshake                    = false;
-             TraceIpSubscription               = false;
-             TraceKeepAliveClient              = false;
-             TraceLocalChainSyncProtocol       = false;
-             TraceLocalErrorPolicy             = false;
-             TraceLocalHandshake               = false;
-             TraceLocalStateQueryProtocol      = false;
-             TraceLocalTxSubmissionProtocol    = true;
-             TraceLocalTxSubmissionServer      = true;
-             TraceMempool                      = true;
-             TraceTxInbound                    = true;
-             TraceTxOutbound                   = true;
-             TraceTxSubmissionProtocol         = true;
-             TraceTxSubmission2Protocol        = true;
+  #            TraceAcceptPolicy                 = false;
+  #            TraceBlockFetchClient             = true;
+  #            TraceBlockFetchDecisions          = false;
+  #            TraceBlockFetchProtocol           = true;
+  #            TraceBlockFetchProtocolSerialised = false;
+  #            TraceBlockFetchServer             = false;
+  #            TraceBlockchainTime               = false;
+  #            TraceChainDB                      = true;
+  #            TraceChainSyncBlockServer         = false;
+  #            TraceChainSyncClient              = true;
+  #            TraceChainSyncHeaderServer        = false;
+  #            TraceChainSyncProtocol            = false;
+  #            TraceDiffusionInitialization      = false;
+  #            TraceDnsResolver                  = false;
+  #            TraceDnsSubscription              = false;
+  #            TraceErrorPolicy                  = true;
+  #            TraceForge                        = false;
+  #            TraceForgeStateInfo               = false;
+  #            TraceHandshake                    = false;
+  #            TraceIpSubscription               = false;
+  #            TraceKeepAliveClient              = false;
+  #            TraceLocalChainSyncProtocol       = false;
+  #            TraceLocalErrorPolicy             = false;
+  #            TraceLocalHandshake               = false;
+  #            TraceLocalStateQueryProtocol      = false;
+  #            TraceLocalTxSubmissionProtocol    = true;
+  #            TraceLocalTxSubmissionServer      = true;
+  #            TraceMempool                      = true;
+  #            TraceTxInbound                    = true;
+  #            TraceTxOutbound                   = true;
+  #            TraceTxSubmissionProtocol         = true;
+  #            TraceTxSubmission2Protocol        = true;
 
-             TurnOnLogMetrics = true;
-             options = {
-               mapBackends = {
-                 "cardano.node.resources" = [ "KatipBK" ];
-               };
-             };
-           } //
-          ({
-            shelley =
-              { TestShelleyHardForkAtEpoch = 0;
-              };
-            allegra =
-              { TestShelleyHardForkAtEpoch = 0;
-                TestAllegraHardForkAtEpoch = 0;
-              };
-            mary =
-              { TestShelleyHardForkAtEpoch = 0;
-                TestAllegraHardForkAtEpoch = 0;
-                TestMaryHardForkAtEpoch = 0;
-              };
-            alonzo =
-              { TestShelleyHardForkAtEpoch = 0;
-                TestAllegraHardForkAtEpoch = 0;
-                TestMaryHardForkAtEpoch = 0;
-                TestAlonzoHardForkAtEpoch = 0;
-              };
-            babbage =
-              { TestShelleyHardForkAtEpoch = 0;
-                TestAllegraHardForkAtEpoch = 0;
-                TestMaryHardForkAtEpoch = 0;
-                TestAlonzoHardForkAtEpoch = 0;
-                TestBabbageHardForkAtEpoch = 0;
-              };
-          }).${globals.profile.value.era}
-          // (globals.profile.value.node.extra_config or {})
-          ));
-  };
+  #            TurnOnLogMetrics = true;
+  #            options = {
+  #              mapBackends = {
+  #                "cardano.node.resources" = [ "KatipBK" ];
+  #              };
+  #            };
+  #          } //
+  #         ({
+  #           shelley =
+  #             { TestShelleyHardForkAtEpoch = 0;
+  #             };
+  #           allegra =
+  #             { TestShelleyHardForkAtEpoch = 0;
+  #               TestAllegraHardForkAtEpoch = 0;
+  #             };
+  #           mary =
+  #             { TestShelleyHardForkAtEpoch = 0;
+  #               TestAllegraHardForkAtEpoch = 0;
+  #               TestMaryHardForkAtEpoch = 0;
+  #             };
+  #           alonzo =
+  #             { TestShelleyHardForkAtEpoch = 0;
+  #               TestAllegraHardForkAtEpoch = 0;
+  #               TestMaryHardForkAtEpoch = 0;
+  #               TestAlonzoHardForkAtEpoch = 0;
+  #             };
+  #           babbage =
+  #             { TestShelleyHardForkAtEpoch = 0;
+  #               TestAllegraHardForkAtEpoch = 0;
+  #               TestMaryHardForkAtEpoch = 0;
+  #               TestAlonzoHardForkAtEpoch = 0;
+  #               TestBabbageHardForkAtEpoch = 0;
+  #             };
+  #         }).${globals.profile.value.era}
+  #         // (globals.profile.value.node.extra_config or {})
+  #         ))
+  # }
 
   deployment.keys = {
     "cardano-node-signing" = {

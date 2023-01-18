@@ -32,6 +32,10 @@
       url = "github:input-output-hk/iohk-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    ops-lib = {
+      url = "github:input-output-hk/ops-lib";
+      flake = false;
+    };
     flake-compat = {
       url = "github:input-output-hk/flake-compat/fixes";
       flake = false;
@@ -85,6 +89,7 @@
     , haskellNix
     , CHaP
     , iohkNix
+    , ops-lib
     , plutus-apps
     , cardano-mainnet-mirror
     , node-snapshot
@@ -128,7 +133,7 @@
             // import ./nix/svclib.nix { inherit (final) pkgs; };
         })
         (import ./nix/pkgs.nix)
-        (import ./nix/workbench/membench-overlay.nix
+        (import ./nix/workbench/membench/membench-overlay.nix
           {
             inherit
               lib
@@ -138,7 +143,7 @@
             customConfig = customConfig.membench;
           })
         self.overlay
-      ];
+      ] ++ (import ops-lib.outPath {}).overlays;
 
       collectExes = project:
         let
@@ -229,11 +234,12 @@
                 {
                   profileName = "ci-test-bage";
                   backendName = "supervisor";
+                  useCabalRun = false;
                   cardano-node-rev =
                     if __hasAttr "rev" self
                     then pkgs.gitrev
                     else throw "Cannot get git revision of 'cardano-node', unclean checkout?";
-                }).profile-run { };
+                }).workbench-profile-run { };
 
             inherit (pkgs) all-profiles-json;
           }
@@ -345,9 +351,14 @@
 
       flake = eachSystem supportedSystems (system:
         let
+          config = recursiveUpdate haskellNix.config
+            {
+              permittedInsecurePackages = [
+                "python2.7-pyjwt-1.7.1" ## for 'nixops'
+              ];
+            };
           pkgs = import nixpkgs {
-            inherit system overlays;
-            inherit (haskellNix) config;
+            inherit config system overlays;
           };
           inherit (mkFlakeAttrs pkgs) environments packages checks apps project ciJobs devShells workbench;
         in

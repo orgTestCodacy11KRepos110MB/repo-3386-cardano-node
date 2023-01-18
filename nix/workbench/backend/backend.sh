@@ -28,8 +28,7 @@ usage_backend() {
     cleanup-cluster RUNDIR
                      Wipe cluster state to pristine
 
-    assert-is BACKEND-NAME
-                     Check that the current backend is as expected
+    validate         Basic workbench backend sanity check
 
     assert-stopped   Assert that cluster is not running
 EOF
@@ -58,15 +57,15 @@ case "${op}" in
     ## Handle non-generic calls:
     passthrough | pass )         backend_$WB_BACKEND "$@";;
 
-    assert-is )
-        local usage="USAGE: wb run $op BACKEND-NAME"
-        local name=${2:?$usage}
+    validate )
+        local usage="USAGE: wb run $op"
 
         ## Check the backend echoes own name:
         local actual_name=$(backend_$WB_BACKEND name)
-        if test "$actual_name" != "$name"
+        if test "$actual_name" != "$WB_BACKEND"
         then fatal "Workbench is broken:  'workbench_$WB_BACKEND name' returned:  '$actual_name'"; fi
-        ;;
+
+        backend_$WB_BACKEND validate;;
 
     assert-stopped )
         backend is-running run/current &&

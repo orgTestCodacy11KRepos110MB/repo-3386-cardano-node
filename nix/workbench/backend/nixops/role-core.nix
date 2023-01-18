@@ -43,40 +43,21 @@ let
         _file = ./core.nix;
 
         services.cardano-node =
-          if config.node.roles.isCardanoDensePool
-          then {
-            extraArgs = [ "--bulk-credentials-file" "/var/lib/keys/cardano-node-bulk-credentials" ];
-          }
-          else {
+          {
             kesKey = "/var/lib/keys/cardano-node-kes-signing";
             vrfKey = "/var/lib/keys/cardano-node-vrf-signing";
             operationalCertificate = "/var/lib/keys/cardano-node-operational-cert";
           };
 
         systemd.services."cardano-node" =
-          if config.node.roles.isCardanoDensePool
-          then {
-            after  = [ "cardano-node-bulk-credentials-key.service" ];
-            wants  = [ "cardano-node-bulk-credentials-key.service" ];
-            partOf = [ "cardano-node-bulk-credentials-key.service" ];
-          }
-          else {
+          {
             after = [ "cardano-node-vrf-signing-key.service" "cardano-node-kes-signing-key.service" "cardano-node-operational-cert-key.service" ];
             wants = [ "cardano-node-vrf-signing-key.service" "cardano-node-kes-signing-key.service" "cardano-node-operational-cert-key.service" ];
             partOf = [ "cardano-node-vrf-signing-key.service" "cardano-node-kes-signing-key.service" "cardano-node-operational-cert-key.service" ];
           };
 
         deployment.keys =
-          if config.node.roles.isCardanoDensePool
-          then {
-            "cardano-node-bulk-credentials" = builtins.trace ("${name}: using " + (toString bulkCredentials)) {
-              keyFile = bulkCredentials;
-              user = "cardano-node";
-              group = "cardano-node";
-              destDir = "/var/lib/keys";
-            };
-          }
-          else {
+          {
             "cardano-node-vrf-signing" = builtins.trace ("${name}: using " + (toString vrfKey)) {
               keyFile = vrfKey;
               user = "cardano-node";

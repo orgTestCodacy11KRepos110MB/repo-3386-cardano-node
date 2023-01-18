@@ -156,6 +156,12 @@ def all_profile_variants:
       }
     } as $aws
   |
+    { composition:
+      { locations:                      ["EU"]
+      , topology:                       "torus"
+      }
+    } as $aws_eu_only
+  |
   ##
   ### Definition vocabulary:  filtering
   ##
@@ -451,7 +457,7 @@ def all_profile_variants:
   , $citest_base * $without_tracer *
     { name: "ci-test-notracer"
     }
-  , $citest_base * $aws *
+  , $citest_base * $aws_eu_only *
     { name: "aws-test"
     }
 

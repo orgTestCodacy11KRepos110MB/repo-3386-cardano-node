@@ -1,12 +1,38 @@
-pkgs: { options, config, name, nodes, resources,  ... }:
+pkgs:
+profileNix:
+{ options, config, name, nodes, resources,  ... }:
 with pkgs; with lib;
 let
+  inherit (profileNix) node-services;
+
   nodeId = config.node.nodeId;
   cfg = config.services.cardano-node;
   nodePort = globals.cardanoNodePort;
   hostAddr = getListenIp nodes.${name};
 
   monitoringPort = globals.cardanoNodePrometheusExporterPort;
+
+  getPublicIp = resources: nodes: nodeName:
+    resources.elasticIPs."${nodeName}-ip".address or
+    (let
+      publicIp = nodes.${nodeName}.config.networking.publicIPv4;
+    in
+      if (nodes.${nodeName}.options.networking.publicIPv4.isDefined && publicIp != null) then publicIp
+      else (builtins.trace "No public IP found for node: ${nodeName}" "")
+    );
+  getStaticRouteIp = resources: nodes: nodeName: resources.elasticIPs."${nodeName}-ip".address
+    or (let
+      publicIp = nodes.${nodeName}.config.networking.publicIPv4;
+      privateIp = nodes.${nodeName}.config.networking.privateIPv4;
+    in
+      if (nodes.${nodeName}.options.networking.publicIPv4.isDefined && publicIp != null) then publicIp
+      else if (nodes.${nodeName}.options.networking.privateIPv4.isDefined && privateIp != null) then privateIp
+      else (builtins.trace "No suitable ip found for node: ${nodeName}" "")
+    );
+
+  getListenIp = node:
+    let ip = node.config.networking.privateIPv4;
+    in if (node.options.networking.privateIPv4.isDefined && ip != null) then ip else "0.0.0.0";
 
   hostName = name: "${name}.cardano";
   staticRouteIp = getStaticRouteIp resources nodes;
@@ -62,6 +88,8 @@ in
 {
   imports = [
     cardano-ops.modules.common
+
+    ## Services:
     ../../../nixos
     (import ../../../nixos/cardano-tracer-service.nix
       ## XXX: ugly -- svclib should really move to iohk-nix.
@@ -108,80 +136,87 @@ in
       allowedUDPPortRanges = [ { from = 1024; to = 65000; } ];
     };
 
-    services.cardano-node = {
-      enable = true;
-      systemdSocketActivation = true;
-      # https://downloads.haskell.org/~ghc/latest/docs/html/users_guide/runtime_control.html
-      rtsArgs = [ "-N${toString (cfg.totalCpuCores / cfg.instances)}" "-A16m" "-qg" "-qb" "-M${toString (cfg.totalMaxHeapSizeMbytes / cfg.instances)}M" ];
-      environment = globals.environmentName;
-      # cardanoNodePackages = lib.mkDefault cardanoNodePackages;
-      inherit hostAddr nodeId instanceProducers instancePublicProducers;
-      ipv6HostAddr = mkIf (cfg.instances > 1) "::1";
-      producers = mkDefault [];
-      publicProducers = mkDefault [];
-      port = nodePort;
-      environments = {
-        "${globals.environmentName}" = globals.environmentConfig;
-      };
-      nodeConfig = finaliseNodeConfig
-                     globals.profile.value.node.withNewTracing
-                     globals.environmentConfig.nodeConfig;
-      extraNodeConfig =
-        finaliseNodeConfig
-          globals.profile.value.node.withNewTracing
-      {
-        hasPrometheus = [ cfg.hostAddr globals.cardanoNodePrometheusExporterPort ];
-        # The maximum number of used peers when fetching newly forged blocks:
-        MaxConcurrencyDeadline = 4;
-        # Use Journald output:
-        setupScribes = [{
-          scKind = "JournalSK";
-          scName = "cardano";
-          scFormat = "ScText";
-        }];
-        defaultScribes = [
-          [
-            "JournalSK"
-            "cardano"
-          ]
-        ];
-        # TraceMempool makes cpu usage x3, disabling by default:
-        TraceMempool = false;
-      };
-      extraServiceConfig = _: {
-        serviceConfig = {
-          # Allow time to uncompress when restoring db
-          TimeoutStartSec = "1h";
-          MemoryMax = "${toString (1.15 * cfg.totalMaxHeapSizeMbytes / cfg.instances)}M";
-          LimitNOFILE = "65535";
-        };
-      };
-    };
-    systemd.services.cardano-node = {
-      path = [ gnutar gzip ];
-      preStart = ''
-        cd $STATE_DIRECTORY
-        if [ -f db-restore.tar.gz ]; then
-          rm -rf db-${globals.environmentName}*
-          tar xzf db-restore.tar.gz
-          rm db-restore.tar.gz
-        fi
-      '';
-      serviceConfig = {
-        # Allow time to uncompress when restoring db
-        TimeoutStartSec = "1h";
-      };
-    };
+    services.cardano-node =
+      profileNix.node-services.${name}.serviceConfig.value;
+    # {
+    #   enable = true;
+    #   systemdSocketActivation = true;
+    #   # https://downloads.haskell.org/~ghc/latest/docs/html/users_guide/runtime_control.html
+    #   rtsArgs = [ "-N${toString (cfg.totalCpuCores / cfg.instances)}" "-A16m" "-qg" "-qb" "-M${toString (cfg.totalMaxHeapSizeMbytes / cfg.instances)}M" ];
+    #   environment = globals.environmentName;
+    #   # cardanoNodePackages = lib.mkDefault cardanoNodePackages;
+    #   inherit hostAddr nodeId instanceProducers instancePublicProducers;
+    #   ipv6HostAddr = mkIf (cfg.instances > 1) "::1";
+    #   producers = mkDefault [];
+    #   publicProducers = mkDefault [];
+    #   port = nodePort;
+    #   environments = {
+    #     "${globals.environmentName}" = globals.environmentConfig;
+    #   };
+    #   nodeConfig = serviceConfig.finaliseNodeConfig
+    #                  globals.profile.value.node.withNewTracing
+    #                  globals.environmentConfig.nodeConfig;
+    #   extraNodeConfig =
+    #     finaliseNodeConfig
+    #       globals.profile.value.node.withNewTracing
+    #   {
+    #     hasPrometheus = [ cfg.hostAddr globals.cardanoNodePrometheusExporterPort ];
+    #     # The maximum number of used peers when fetching newly forged blocks:
+    #     MaxConcurrencyDeadline = 4;
+    #     # Use Journald output:
+    #     setupScribes = [{
+    #       scKind = "JournalSK";
+    #       scName = "cardano";
+    #       scFormat = "ScText";
+    #     }];
+    #     defaultScribes = [
+    #       [
+    #         "JournalSK"
+    #         "cardano"
+    #       ]
+    #     ];
+    #     # TraceMempool makes cpu usage x3, disabling by default:
+    #     TraceMempool = false;
+    #   };
+    #   extraServiceConfig = _: {
+    #     serviceConfig = {
+    #       # Allow time to uncompress when restoring db
+    #       TimeoutStartSec = "1h";
+    #       MemoryMax = "${toString (1.15 * cfg.totalMaxHeapSizeMbytes / cfg.instances)}M";
+    #       LimitNOFILE = "65535";
+    #     };
+    #   };
+    # }
 
-    services.cardano-tracer = {
-      enable = true;
-      acceptingSocket = (cfg.stateDir 0) + "/tracer.socket";
-      logRoot = cfg.stateDir 0;
-      rotation.rpLogLimitBytes = 1000 * 1000 * 1000;
-    };
+    # systemd.services.cardano-node = {
+    #   path = [ gnutar gzip ];
+    #   preStart = ''
+    #     cd $STATE_DIRECTORY
+    #     if [ -f db-restore.tar.gz ]; then
+    #       rm -rf db-${globals.environmentName}*
+    #       tar xzf db-restore.tar.gz
+    #       rm db-restore.tar.gz
+    #     fi
+    #   '';
+    #   serviceConfig = {
+    #     # Allow time to uncompress when restoring db
+    #     TimeoutStartSec = "1h";
+    #   };
+    # }
+
+    services.cardano-tracer =
+      profileNix.tracer-service.nixos-service-config.value;
+    # {
+    #   enable = true;
+    #   acceptingSocket = (cfg.stateDir 0) + "/tracer.socket";
+    #   logRoot = cfg.stateDir 0;
+    #   rotation.rpLogLimitBytes = 1000 * 1000 * 1000;
+    # }
     systemd.services.cardano-tracer.serviceConfig.Environment = [("HOME=" + cfg.stateDir 0)];
 
     users.users.cardano-node.isSystemUser = true;
+    users.users.cardano-node.group = "cardano-node";
+    users.groups.cardano-node = {};
 
     services.dnsmasq.enable = true;
 

@@ -60,9 +60,11 @@ case "$op" in
             -I profileJson="$dir"/profile.json
             --allow-reboot
             --confirm
-            --copy-only
-            --cores 0
+            # --build-only
+            # --copy-only
+            --show-trace
             --no-build-output
+            --cores 0
             -j 4
         )
         nixops deploy "${deploy_args[@]}"
@@ -132,7 +134,7 @@ EOF
         local usage="USAGE: wb nixops $op RUN-DIR"
         local dir=${1:?$usage}; shift
 
-        if ! nixopsd --config  "$dir"/nixops/nixopsd.conf $@
+        if ! nixops --config  "$dir"/nixops/nixopsd.conf $@
         then progress "nixops" "$(red fatal: failed to start) $(white nixopsd)"
              echo "$(red nixopsd.conf) --------------------------------" >&2
              cat "$dir"/nixops/nixopsd.conf

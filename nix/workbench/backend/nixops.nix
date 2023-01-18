@@ -4,38 +4,21 @@
 }:
 with lib;
 let
-  name = "nixops";
-
-  plugins = [ "nixops-aws"
-              "nixops-libvirtd"
-            ];
-  sourcePaths = import ./nixops/sources.nix { inherit pkgs; };
-
-  nixops = (import (sourcePaths.nixops-core + "/release.nix") {
-    nixpkgs = sourcePaths.nixpkgs-nixops;
-    nixpkgsConfig.permittedInsecurePackages =
-      [
-        "libvirt-5.9.0"
-      ];
-    pluginsSources = sourcePaths;
-    p = lib.attrVals plugins;
-    withManual = false;
-  }).build.${pkgs.stdenv.system};
-
-  extraShellPkgs = with pkgs;
-    [
-      nixops
-    ];
-
-  materialise-profile =
-    { stateDir, profileNix }:
-      let
-      in pkgs.runCommand "workbench-backend-output-${profileNix.profileName}-${name}"
-        {}
-        ''
-        mkdir $out
-        touch $out/empty
-        '';
+  nixopsAlaCardanoOps =
+    let plugins = [ "nixops-aws"
+                    "nixops-libvirtd"
+                  ];
+        sourcePaths = import ./nixops/sources.nix { inherit pkgs; };
+    in
+      (import (sourcePaths.nixops-core + "/release.nix") {
+        nixpkgs = sourcePaths.nixpkgs-nixops;
+        # nixpkgs = pkgs.outPath;
+        nixpkgsConfig.permittedInsecurePackages = [ "libvirt-5.9.0" ];
+        pluginsSources = sourcePaths;
+        p = lib.attrVals plugins;
+        withManual = false;
+      }).build.${pkgs.stdenv.system};
+  extraShellPkgs = [ nixopsAlaCardanoOps ];
 
   mkGlobals =
     profileNix: pkgs: _:
@@ -141,10 +124,10 @@ let
     rec {
       profile = profileNix;
 
-      deploymentName = "${builtins.baseNameOf ../../../..}";
-      networkName = "Benchmarking, size ${toString (__length topologyNix.coreNodes)}";
+      deploymentName = builtins.getEnv "WB_DEPLOYMENT_NAME";
+      networkName = "Workbench cluster ${deploymentName}, ${toString (__length topologyNix.coreNodes)} block producers, ${toString (__length topologyNix.relayNodes)} relays, profile ${profileNix.profileName}";
 
-      withMonitoring = true;
+      withMonitoring = false;
       withExplorer = false;
       withSnapshots = false;
       withSubmitApi = false;
@@ -218,7 +201,7 @@ let
 
         ## This is overlaid atop the defaults in the tx-generator service,
         ## as specified in the 'cardano-node' repository.
-        generatorConfig = (traceValSeqN 3 profileNix).value.generator;
+        generatorConfig = profileNix.value.generator;
       };
 
       topology = {
@@ -229,7 +212,7 @@ let
               {
                 ## XXX: assumes we have `explorer` as our only relay.
                 imports = [
-                  pkgs.cardano-ops.roles.tx-generator
+                  # pkgs.cardano-ops.roles.tx-generator
                   # ({ config, ...}: {
                   # })
                 ];
@@ -282,24 +265,35 @@ let
         };
     };
 
+  materialise-profile =
+    { stateDir, profileNix }:
+      let
+      in pkgs.runCommand "workbench-backend-output-${profileNix.profileName}-nixops"
+        {}
+        ''
+        mkdir $out
+        touch $out/empty
+        '';
+
   overlay = profileNix: self: super:
     {
       globals = mkGlobals profileNix self super;
       cardano-ops = {
         modules = {
-          base-service = import ./nixops/module-base-service.nix self;
+          base-service = import ./nixops/module-base-service.nix self profileNix;
           common       = import ./nixops/module-common.nix       self;
         };
         roles = {
           core         = import ./nixops/role-core.nix         self;
           relay        = import ./nixops/role-relay.nix        self;
-          tx-generator = import ./nixops/role-tx-generator.nix self;
+          tx-generator = import ./nixops/role-tx-generator.nix self profileNix;
         };
       };
     };
 in
 {
-  inherit name extraShellPkgs materialise-profile overlay;
+  inherit extraShellPkgs materialise-profile overlay;
 
+  name = "nixops";
   useCabalRun = false;
 }

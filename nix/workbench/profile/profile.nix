@@ -57,6 +57,8 @@ rec {
   ## WARNING:  IFD !!
   profile = { profileName
             , basePort, stateDir, useCabalRun }:
+    let svcConfig = servicesConfig { inherit basePort stateDir useCabalRun; };
+    in
     rec {
       inherit profileName;
 
@@ -82,10 +84,11 @@ rec {
             nodeSpecsJson = node-specs.JSON;
           };
 
+      servicesConfig = svcConfig;
+
       inherit (services
         {
-          servicesConfig = servicesConfig
-            { inherit basePort stateDir useCabalRun; };
+          servicesConfig = svcConfig;
           profile = value;
           nodeSpecs = node-specs.value;
           topologyFiles = topology.files;

@@ -1,73 +1,47 @@
-let nix = import ../../..
-  { localCluster = {
-      profileName = (__fromJSON (__readFile <profileJson>)).name;
-      backendName = "nixops";
-      useCabalRun = false;
+let
+  ## IFD:
+  profile = __fromJSON (__readFile <profileJson>);
+  nix = import ../../..
+    { localCluster = {
+        profileName = profile.name;
+        backendName = "nixops";
+        useCabalRun = false;
+        workbenchDevMode = true;
+      };
+      withHoogle = false;
     };
-    withHoogle = false;
-  };
 in
 with nix;
+
 let
   inherit (pkgs.lib)
     attrValues attrNames filter filterAttrs flatten foldl' hasAttrByPath listToAttrs
     mapAttrs' mapAttrs nameValuePair recursiveUpdate unique optional any concatMap
     getAttrs optionalString hasPrefix take drop length concatStringsSep head toLower
-    elem;
+    elem traceValSeqN;
 
   inherit (globals.topology) coreNodes relayNodes;
   privateRelayNodes = globals.topology.privateRelayNodes or [];
   inherit (globals.ec2.credentials) accessKeyIds;
-  inherit (iohk-ops-lib.physical) aws;
 
-  cluster = import ./cardano.nix {
+  cluster = import ./deployment.nix {
     inherit pkgs;
     instances = globals.ec2.instances // { targetEnv = "ec2"; };
   };
+  nodes = filterAttrs (name: node: ((node.deployment.targetEnv or null) == "ec2")
+                                   && ((node.deployment.ec2.region or null) != null))
+                      cluster;
+  regions = unique (map (node: node.deployment.ec2.region) (attrValues nodes));
+  orgs    = unique (map (node: node.node.org)              (attrValues nodes));
 
-  nodes = filterAttrs (name: node:
-    ((node.deployment.targetEnv or null) == "ec2")
-    && ((node.deployment.ec2.region or null) != null)) cluster;
-
-  doMonitoring = any (n: n.node.roles.isMonitor or false) (attrValues nodes);
-
-  regions =
-    unique (map (node: node.deployment.ec2.region) (attrValues nodes));
-
-  orgs =
-    unique (map (node: node.node.org) (attrValues nodes));
-
-  securityGroups = with aws.security-groups; [
+  securityGroups = with iohk-ops-lib.physical.aws.security-groups; [
     {
       nodes = getAttrs (map (n: n.name) (coreNodes ++ privateRelayNodes)) nodes;
-      groups = [ (import ./allow-peers.nix) ];
+      groups = [ (import ./sg-allow-peers.nix) ];
     }
     {
       nodes = getAttrs (map (n: n.name) relayNodes) nodes;
-      groups = [ (import ./allow-public.nix) ];
-    }
-    {
-      nodes = filterAttrs (_: n: n.node.roles.isMonitor or false) nodes;
-      groups = [
-        allow-public-www-https
-        allow-graylog
-      ];
-    }
-    {
-      nodes = (filterAttrs (_: n: n.node.roles.isExplorer or false) nodes);
-      groups = [ allow-public-www-https ];
-    }
-    {
-      nodes = (filterAttrs (_: n: n.node.roles.isExplorerBackend or false) nodes);
-      groups = [ (import ./allow-explorer-gw.nix) ];
-    }
-    {
-      nodes = (filterAttrs (_: n: n.node.roles.isMetadata or false) nodes);
-      groups = [ allow-public-www-https ];
-    }
-    {
-      nodes = (filterAttrs (_: n: n.node.roles.isFaucet or false) nodes);
-      groups = [ allow-public-www-https ];
+      groups = [ (import ./sg-allow-public.nix) ];
     }
     {
       nodes = (filterAttrs (_: n: n.node.roles.isPublicSsh or false) nodes);
@@ -75,28 +49,25 @@ let
     }
     {
       inherit nodes;
-      groups = [ allow-deployer-ssh ]
-               ++ optional doMonitoring
-               allow-monitoring-collection;
+      groups = [ allow-deployer-ssh ];
     }
   ];
 
-  importSecurityGroup =  node: securityGroup:
-    securityGroup {
-      inherit pkgs lib nodes;
-      region = node.deployment.ec2.region;
-      org = node.node.org;
-      accessKeyId = pkgs.globals.ec2.credentials.accessKeyIds.${node.node.org};
-    };
-
-
-  importSecurityGroups = {nodes, groups}:
-    mapAttrs
-      (_: n: foldl' recursiveUpdate {} (map (importSecurityGroup n) groups))
-      nodes;
-
   securityGroupsByNode =
-    foldl' recursiveUpdate {} (map importSecurityGroups securityGroups);
+    let
+      importSecurityGroup =  node: securityGroup:
+        securityGroup {
+          inherit pkgs lib nodes;
+          region = node.deployment.ec2.region;
+          org = node.node.org;
+          accessKeyId = accessKeyIds.${node.node.org};
+        };
+      importSecurityGroups = {nodes, groups}:
+        mapAttrs
+          (_: n: foldl' recursiveUpdate {} (map (importSecurityGroup n) groups))
+          nodes;
+    in
+      foldl' recursiveUpdate {} (map importSecurityGroups securityGroups);
 
   settings = {
     resources = {
@@ -113,7 +84,7 @@ let
         map (org:
           nameValuePair "cardano-keypair-${org}-${region}" {
             inherit region;
-            accessKeyId = pkgs.globals.ec2.credentials.accessKeyIds.${org};
+            accessKeyId = accessKeyIds.${org};
           }
         ) orgs)
         regions);
