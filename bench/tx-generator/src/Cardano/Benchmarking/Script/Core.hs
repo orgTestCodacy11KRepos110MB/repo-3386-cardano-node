@@ -281,6 +281,7 @@ evalGenerator :: forall era. IsShelleyBasedEra era => Generator -> TxGenTxParams
 evalGenerator generator txParams@TxGenTxParams{txParamFee = fee} era = do
   networkId <- getEnvNetworkId
   protocolParameters <- getProtocolParameters
+
   case generator of
     SecureGenesis wallet genesisKeyName destKeyName -> do
       genesis  <- getEnvGenesis
@@ -294,6 +295,7 @@ evalGenerator generator txParams@TxGenTxParams{txParamFee = fee} era = do
           walletRefInsertFund destWallet fund
           return $ Right tx
       return $ Streaming.effect (Streaming.yield <$> gen)
+
     Split walletName payMode payModeChange coins -> do
       wallet <- getEnvWallets walletName
       (toUTxO, addressOut) <- interpretPayMode payMode
@@ -306,6 +308,7 @@ evalGenerator generator txParams@TxGenTxParams{txParamFee = fee} era = do
         txGenerator = genTx protocolParameters (TxInsCollateralNone, []) feeInEra TxMetadataNone
         sourceToStore = sourceToStoreTransactionNew txGenerator fundSource inToOut $ mangleWithChange toUTxOChange toUTxO
       return $ Streaming.effect (Streaming.yield <$> sourceToStore)
+
     SplitN walletName payMode count -> do
       wallet <- getEnvWallets walletName
       (toUTxO, addressOut) <- interpretPayMode payMode
@@ -327,16 +330,28 @@ evalGenerator generator txParams@TxGenTxParams{txParamFee = fee} era = do
         inToOut = Utils.inputsToOutputsWithFee fee outputs
         txGenerator = genTx protocolParameters collaterals feeInEra (toMetadata metadataSize)
         sourceToStore = sourceToStoreTransactionNew txGenerator fundSource inToOut (mangle $ repeat toUTxO)
+
+      fundPreview <- liftIO $ walletPreview wallet inputs
+      traceDebug $ case sourceTransactionPreview txGenerator fundPreview inToOut (mangle $ repeat toUTxO) of
+        Left err  -> "Error creating Tx preview: " ++ show err
+        Right tx  -> "Projected Tx size in bytes: " ++ show (txSizeInBytes tx)
+
       return $ Streaming.effect (Streaming.yield <$> sourceToStore)
+
     Sequence l -> do
       gList <- forM l $ \g -> evalGenerator g txParams era
       return $ Streaming.for (Streaming.each gList) id
+
     Cycle g -> Streaming.cycle <$> evalGenerator g txParams era
+
     Take count g -> Streaming.take count <$> evalGenerator g txParams era
+
     RoundRobin l -> do
       _gList <- forM l $ \g -> evalGenerator g txParams era
       error "return $ foldr1 Streaming.interleaves gList"
+
     OneOf _l -> error "todo: implement Quickcheck style oneOf generator"
+
   where
     feeInEra = Utils.mkTxFee fee
 
@@ -435,17 +450,18 @@ makePlutusContext ScriptSpec{..} = do
 
       case plutusAutoBudgetMaxOut protocolParameters script autoBudget of
         Left err -> liftTxGenError err
-        Right (PlutusAutoBudget{..}, loopCalibration) -> do
+        Right (PlutusAutoBudget{..}, loopCalibration, limitFactors) -> do
           preRun <- preExecuteScriptAction protocolParameters script autoBudgetDatum autoBudgetRedeemer
           let
             summary = PlutusAutoBudgetSummary
-              { budgetPerTx       = perTxBudget
-              , budgetPerTxInput  = budget
-              , scriptId          = scriptSpecFile
-              , loopCounter       = loopCalibration
-              , budgetUsed        = preRun
-              , scriptDatum       = autoBudgetDatum
-              , scriptRedeemer    = autoBudgetRedeemer
+              { budgetPerTx         = perTxBudget
+              , budgetPerTxInput    = budget
+              , scriptId            = scriptSpecFile
+              , loopCounter         = loopCalibration
+              , loopLimitingFactors = limitFactors
+              , budgetUsed          = preRun
+              , scriptDatum         = autoBudgetDatum
+              , scriptRedeemer      = autoBudgetRedeemer
               }
             summaryFile = "plutus-auto-budget-summary.json"
           liftIO $ BSL.writeFile summaryFile $ prettyPrintOrdered summary
