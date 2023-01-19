@@ -32,6 +32,7 @@ import qualified Hedgehog.Extras.Test.File as H
 import qualified System.Info as OS
 
 import qualified Testnet.Util.Assert as H
+import           Testnet.Util.Cli
 import           Testnet.Util.Process (execCli_)
 import           Testnet.Util.Runtime (Delegator (..), NodeLoggingFormat (..), PaymentKeyPair (..),
                    PoolNode (PoolNode), PoolNodeKeys (..), StakingKeyPair (..),
@@ -166,8 +167,12 @@ babbageTestnet testnetOptions H.Conf {..} = do
     PoolNodeKeys
       { poolNodeKeysColdVkey = tempAbsPath </> "pools" </> "cold" <> show n <> ".vkey"
       , poolNodeKeysColdSkey = tempAbsPath </> "pools" </> "cold" <> show n <> ".skey"
+      , poolNodeKeysVrf = ( File $ tempAbsPath </> "node-spo" <> show n </> "vrf.vkey"
+                          , File $ tempAbsPath </> "node-spo" <> show n </> "vrf.skey"
+                          )
       , poolNodeKeysVrfVkey = tempAbsPath </> "node-spo" <> show n </> "vrf.vkey"
       , poolNodeKeysVrfSkey = tempAbsPath </> "node-spo" <> show n </> "vrf.skey"
+      , poolNodeKeysOperator = undefined
       , poolNodeKeysStakingVkey = tempAbsPath </> "pools" </> "staking-reward" <> show n <> ".vkey"
       , poolNodeKeysStakingSkey = tempAbsPath </> "pools" </> "staking-reward" <> show n <> ".skey"
       }

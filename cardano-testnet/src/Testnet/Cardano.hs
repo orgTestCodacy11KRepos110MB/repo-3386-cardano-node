@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeApplications #-}
+{-# OPTIONS_GHC -Wno-unused-do-bind #-}
 
 module Testnet.Cardano
   ( ForkPoint(..)
@@ -60,7 +61,8 @@ import           Testnet.Util.Cli
 import qualified Testnet.Util.Process as H
 import           Testnet.Util.Process (execCli_)
 import           Testnet.Util.Runtime as TR (NodeLoggingFormat (..), PaymentKeyPair (..),
-                   PoolNode (PoolNode), PoolNodeKeys (..), TestnetRuntime (..), startNode)
+                   PoolNode (PoolNode), TestnetRuntime (..), startNode)
+import           Testnet.Util.Runtime (PoolNodeKeys (..))
 
 import qualified Testnet.Conf as H
 
@@ -157,11 +159,30 @@ mkTopologyConfig numNodes allPorts port True = J.encode topologyP2P
         (P2P.UseLedger DontUseLedger)
 
 cardanoTestnet :: CardanoTestnetOptions -> H.Conf -> H.Integration TestnetRuntime
-cardanoTestnet testnetOptions H.Conf {..} = do
+cardanoTestnet testnetOptions configuration = do
   void $ H.note OS.os
   currentTime <- H.noteShowIO DTC.getCurrentTime
   startTime <- H.noteShow $ DTC.addUTCTime startTimeOffsetSeconds currentTime
-  configurationFile <- H.noteShow $ tempAbsPath </> "configuration.yaml"
+  
+  cardanoTestnetPart1 testnetOptions configuration startTime
+  cardanoTestnetPart2 testnetOptions configuration
+  cardanoTestnetPart3 testnetOptions configuration
+  cardanoTestnetPart4 testnetOptions configuration startTime
+  poolKeys <- cardanoTestnetPart5 testnetOptions configuration
+
+  wallets <- cardanoTestnetPart6 testnetOptions configuration
+  cardanoTestnetPart7 testnetOptions configuration
+  testnetRuntime <- cardanoTestnetPart8 testnetOptions configuration poolKeys wallets
+  return testnetRuntime
+
+
+cardanoTestnetPart1
+  :: CardanoTestnetOptions
+  -> H.Conf
+  -> DTC.UTCTime
+  -> H.Integration ()
+cardanoTestnetPart1 testnetOptions H.Conf {..} startTime = do
+
   let numBftNodes = L.length (cardanoBftNodeOptions testnetOptions)
       bftNodesN = [1 .. numBftNodes]
       poolNodesN = [1 .. cardanoNumPoolNodes testnetOptions]
@@ -169,16 +190,12 @@ cardanoTestnet testnetOptions H.Conf {..} = do
       poolNodeNames = ("node-pool" <>) . show @Int <$> poolNodesN
       allNodeNames = bftNodeNames <> poolNodeNames
       maxByronSupply = 10020000000
-      fundsPerGenesisAddress = maxByronSupply `div` numBftNodes
-      fundsPerByronAddress = fundsPerGenesisAddress - 100000000
-      userPoolN = poolNodesN
-      maxShelleySupply = 1000000000000
 
   allPorts <- H.noteShowIO $ IO.allocateRandomPorts (L.length allNodeNames)
   nodeToPort <- H.noteShow (M.fromList (L.zip allNodeNames allPorts))
 
   let securityParam = 10
-
+  configurationFile <- H.noteShow $ tempAbsPath </> "configuration.yaml"
   H.readFile configurationTemplate >>= H.writeFile configurationFile
 
   forkOptions <- pure $ id
@@ -302,6 +319,20 @@ cardanoTestnet testnetOptions H.Conf {..} = do
     H.createFileLink (tempAbsPath </> "byron/delegate-keys.00" <> show @Int (n - 1) <> ".key") (tempAbsPath </> "node-bft" <> show @Int n </> "byron/delegate.key")
     H.createFileLink (tempAbsPath </> "byron/delegation-cert.00" <> show @Int (n - 1) <> ".json") (tempAbsPath </> "node-bft" <> show @Int n </> "byron/delegate.cert")
 
+
+-- End Of Part1 Start Of Part2
+
+cardanoTestnetPart2 :: CardanoTestnetOptions -> H.Conf -> H.Integration ()
+cardanoTestnetPart2 testnetOptions H.Conf {..} = do
+
+  let numBftNodes = L.length (cardanoBftNodeOptions testnetOptions)
+      bftNodesN = [1 .. numBftNodes]
+      maxByronSupply = 10020000000
+      fundsPerGenesisAddress = maxByronSupply `div` numBftNodes
+      fundsPerByronAddress = fundsPerGenesisAddress - 100000000
+
+-- End Of Part1 Start Of Part2
+
   -- Create keys and addresses to withdraw the initial UTxO into
   forM_ bftNodesN $ \n -> do
     execCli_
@@ -337,6 +368,15 @@ cardanoTestnet testnetOptions H.Conf {..} = do
       , "--rich-addr-from", richAddrFrom
       , "--txout", show @(String, Int) (txAddr, fundsPerByronAddress)
       ]
+
+-- End Of Part2 Start Of Part3
+cardanoTestnetPart3 :: CardanoTestnetOptions -> H.Conf -> H.Integration ()
+cardanoTestnetPart3 testnetOptions H.Conf {..} = do
+
+  let numBftNodes = L.length (cardanoBftNodeOptions testnetOptions)
+      bftNodesN = [1 .. numBftNodes]
+
+-- End Of Part2 Start Of Part3
 
   -- Update Proposal and votes
   execCli_
@@ -386,6 +426,19 @@ cardanoTestnet testnetOptions H.Conf {..} = do
       , "--vote-yes"
       , "--output-filepath", tempAbsPath </> "update-vote-1.00" <> show @Int (n - 1)
       ]
+
+-- End Of Part3 Start Of Part4
+cardanoTestnetPart4
+  :: CardanoTestnetOptions
+  -> H.Conf
+  -> DTC.UTCTime
+  -> H.Integration ()
+cardanoTestnetPart4 testnetOptions H.Conf {..} startTime = do
+
+  let numBftNodes = L.length (cardanoBftNodeOptions testnetOptions)
+      maxShelleySupply = 1000000000000
+
+-- End Of Part3 Start Of Part4
 
   -- Generated genesis keys and genesis files
   H.noteEachM_ . H.listDirectory $ tempAbsPath </> "byron"
@@ -457,32 +510,43 @@ cardanoTestnet testnetOptions H.Conf {..} = do
   -- Make the pool operator cold keys
   -- This was done already for the BFT nodes as part of the genesis creation
 
+-- End Of Part4 Start Of Part5
+cardanoTestnetPart5 :: CardanoTestnetOptions -> H.Conf -> H.Integration [PoolNodeKeys]
+cardanoTestnetPart5 testnetOptions H.Conf {..} = do
+
+  let numBftNodes = L.length (cardanoBftNodeOptions testnetOptions)
+      bftNodesN = [1 .. numBftNodes]
+      poolNodesN = [1 .. cardanoNumPoolNodes testnetOptions]
+      bftNodeNames = ("node-bft" <>) . show @Int <$> bftNodesN
+      poolNodeNames = ("node-pool" <>) . show @Int <$> poolNodesN
+      allNodeNames = bftNodeNames <> poolNodeNames
+
+-- End Of Part4 Start Of Part5
+
   poolKeys <- forM poolNodesN $ \i -> do
     let node = "node-pool" <> show @Int i
 
-    execCli_
-      [ "node", "key-gen"
-      , "--cold-verification-key-file", tempAbsPath </> node </> "shelley/operator.vkey"
-      , "--cold-signing-key-file", tempAbsPath </> node </> "shelley/operator.skey"
-      , "--operational-certificate-issue-counter-file", tempAbsPath </> node </> "shelley/operator.counter"
-      ]
+    operatorKeys <- cliNodeKeyGen tempAbsPath
+      (node </> "shelley/operator.vkey")
+      (node </> "shelley/operator.skey")
+      (node </> "shelley/operator.counter")
 
     poolNodeKeysColdVkey <- H.note $ tempAbsPath </> "node-pool" <> show i <> "/shelley/operator.vkey"
     poolNodeKeysColdSkey <- H.note $ tempAbsPath </> "node-pool" <> show i <> "/shelley/operator.skey"
     poolNodeKeysStakingVkey <- H.note $ tempAbsPath </> node </> "shelley/staking.vkey"
     poolNodeKeysStakingSkey <- H.note $ tempAbsPath </> node </> "shelley/staking.skey"
 
-    poolNodeKeysVrfVkey <- H.note $ tempAbsPath </> node </> "shelley/vrf.vkey"
-    poolNodeKeysVrfSkey <- H.note $ tempAbsPath </> node </> "shelley/vrf.skey"
-    cliNodeKeyGenVrf tempAbsPath $ KeyNames (node </> "shelley/vrf.vkey") (node </> "shelley/vrf.skey")
+    nodeVrfKeys <- cliNodeKeyGenVrf tempAbsPath $ KeyNames (node </> "shelley/vrf.vkey") (node </> "shelley/vrf.skey")
 
     return PoolNodeKeys
-      { TR.poolNodeKeysColdVkey
-      , TR.poolNodeKeysColdSkey
-      , TR.poolNodeKeysVrfVkey
-      , TR.poolNodeKeysVrfSkey
-      , TR.poolNodeKeysStakingVkey
-      , TR.poolNodeKeysStakingSkey
+      { poolNodeKeysColdVkey
+      , poolNodeKeysColdSkey
+      , poolNodeKeysVrf = nodeVrfKeys
+      , poolNodeKeysOperator = operatorKeys
+      , poolNodeKeysStakingVkey
+      , poolNodeKeysStakingSkey
+      , poolNodeKeysVrfVkey = undefined
+      , poolNodeKeysVrfSkey = undefined
       }
 
   -- Symlink the BFT operator keys from the genesis delegates, for uniformity
@@ -514,10 +578,20 @@ cardanoTestnet testnetOptions H.Conf {..} = do
   --                 initial utxo the
   -- pool-owner1..n: will be the owner of the pools and we'll use their reward
   --                 account for pool rewards
-  let userAddrs = ("user" <>) . show @Int <$> userPoolN
+
+  return poolKeys
+
+-- End Of Part5 Start Of Part6
+cardanoTestnetPart6 :: CardanoTestnetOptions -> H.Conf -> H.Integration [PaymentKeyPair]
+cardanoTestnetPart6 testnetOptions H.Conf {..} = do
+
+  let poolNodesN = [1 .. cardanoNumPoolNodes testnetOptions]
+
+-- End Of Part5 Start Of Part6
+
+  let userAddrs = ("user" <>) . show @Int <$> poolNodesN
       poolAddrs = ("pool-owner" <>) . show @Int <$> poolNodesN
       addrs = userAddrs <> poolAddrs
-
 
   H.createDirectoryIfMissing $ tempAbsPath </> "addresses"
 
@@ -562,9 +636,20 @@ cardanoTestnet testnetOptions H.Conf {..} = do
       { paymentSKey
       , paymentVKey
       }
+  return wallets
+
+-- End Of Part6 Start Of Part7
+cardanoTestnetPart7 :: CardanoTestnetOptions -> H.Conf -> H.Integration ()
+cardanoTestnetPart7 testnetOptions H.Conf {..} = do
+
+  let poolNodesN = [1 .. cardanoNumPoolNodes testnetOptions]
+      poolNodeNames = ("node-pool" <>) . show @Int <$> poolNodesN
+      maxShelleySupply = 1000000000000
+
+-- End Of Part6 Start Of Part7
 
   -- user N will delegate to pool N
-  forM_ userPoolN $ \n -> do
+  forM_ poolNodesN $ \n -> do
     -- Stake address delegation certs
     execCli_
       [ "stake-address", "delegation-certificate"
@@ -691,6 +776,24 @@ cardanoTestnet testnetOptions H.Conf {..} = do
     . HM.insert "ShelleyGenesisHash" shelleyGenesisHash
     . HM.insert "AlonzoGenesisHash" alonzoGenesisHash
 
+-- End Of Part7 Start Of Part8
+cardanoTestnetPart8
+  :: CardanoTestnetOptions
+  -> H.Conf
+  -> [PoolNodeKeys]
+  -> [PaymentKeyPair]
+  -> H.Integration TestnetRuntime
+cardanoTestnetPart8 testnetOptions H.Conf {..} poolKeys wallets = do
+
+  let numBftNodes = L.length (cardanoBftNodeOptions testnetOptions)
+      bftNodesN = [1 .. numBftNodes]
+      poolNodesN = [1 .. cardanoNumPoolNodes testnetOptions]
+      bftNodeNames = ("node-bft" <>) . show @Int <$> bftNodesN
+      poolNodeNames = ("node-pool" <>) . show @Int <$> poolNodesN
+      allNodeNames = bftNodeNames <> poolNodeNames
+
+-- End Of Part7 Start Of Part8
+  configurationFile <- H.noteShow $ tempAbsPath </> "configuration.yaml"
   --------------------------------
   -- Launch cluster of three nodes
 

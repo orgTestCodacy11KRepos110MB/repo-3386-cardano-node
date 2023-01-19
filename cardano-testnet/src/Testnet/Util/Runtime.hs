@@ -44,6 +44,8 @@ import qualified System.Process as IO
 
 import qualified Testnet.Util.Process as H
 
+import           Testnet.Util.Cli
+
 data NodeLoggingFormat = NodeLoggingFormatAsJson | NodeLoggingFormatAsText deriving (Eq, Show)
 
 data TestnetRuntime = TestnetRuntime
@@ -73,8 +75,10 @@ data PoolNode = PoolNode
 data PoolNodeKeys = PoolNodeKeys
   { poolNodeKeysColdVkey :: FilePath
   , poolNodeKeysColdSkey :: FilePath
+  , poolNodeKeysVrf :: (File (Vrf VKey), File (Vrf SKey))
   , poolNodeKeysVrfVkey :: FilePath
   , poolNodeKeysVrfSkey :: FilePath
+  , poolNodeKeysOperator :: (File (Operator VKey), File (Operator SKey), File OperatorCounter)
   , poolNodeKeysStakingVkey :: FilePath
   , poolNodeKeysStakingSkey :: FilePath
   } deriving (Eq, Show)
