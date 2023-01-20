@@ -26,9 +26,10 @@ opts =
   Opt.info (parseClientCommand <**> Opt.helper)
     ( Opt.fullDesc
       <> Opt.header
-      "cardano-cli - General purpose command-line utility to interact with cardano-node.\
-      \ Provides specific commands to manage keys, addresses, build & submit transactions, \
-      \ certificates, etc."
+            (mconcat [ "cardano-cli - General purpose command-line utility to interact with cardano-node."
+                     , " Provides specific commands to manage keys, addresses, build & submit transactions, "
+                     , " certificates, etc."
+                     ])
     )
 
 pref :: ParserPrefs
