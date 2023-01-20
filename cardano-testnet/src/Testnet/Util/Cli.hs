@@ -7,6 +7,7 @@ module Testnet.Util.Cli
   , Comment (..)
   , KeyNames (..)
 
+  , fakeIt
   , File (..)
   , Address
   , Operator
@@ -23,6 +24,12 @@ module Testnet.Util.Cli
   , getSKeyPath
 
   , makeFilePath
+
+  , ByronKey
+  , cliKeyGen
+
+  , ByronAddress
+  , cliSigningKeyAddress
   ) where
 
 import           Prelude
@@ -32,6 +39,7 @@ import           Control.Monad
 import           System.FilePath.Posix
 
 import qualified Hedgehog.Extras.Test.Base as H
+import qualified Hedgehog.Extras.Test.File as H (writeFile)
 import           Hedgehog
 import           Hedgehog.Gen
 
@@ -61,19 +69,19 @@ type KeyGen a = H.Integration (File (a VKey), File (a SKey))
 
 -- cliAddressKeyGen :: FilePath -> Comment -> KeyGen
 cliAddressKeyGen :: FilePath -> KeyNames -> KeyGen Address
-cliAddressKeyGen = cliKeyGen "address" "key-gen"
+cliAddressKeyGen = shelleyKeyGen "address" "key-gen"
 
 cliStakeAddressKeyGen :: FilePath -> KeyNames -> KeyGen StakeAddress
-cliStakeAddressKeyGen = cliKeyGen "stake-address" "key-gen"
+cliStakeAddressKeyGen = shelleyKeyGen "stake-address" "key-gen"
 
 cliNodeKeyGenVrf :: FilePath -> KeyNames -> KeyGen Vrf
-cliNodeKeyGenVrf = cliKeyGen "node" "key-gen-VRF"
+cliNodeKeyGenVrf = shelleyKeyGen "node" "key-gen-VRF"
 
 cliNodeKeyGenKes :: FilePath -> KeyNames -> KeyGen Kes
-cliNodeKeyGenKes = cliKeyGen "node" "key-gen-KES"
+cliNodeKeyGenKes = shelleyKeyGen "node" "key-gen-KES"
 
-cliKeyGen :: String -> String -> FilePath -> KeyNames -> KeyGen x
-cliKeyGen major minor basePath keyNames = do
+shelleyKeyGen :: String -> String -> FilePath -> KeyNames -> KeyGen x
+shelleyKeyGen major minor basePath keyNames = do
   let
     vKeyPath = basePath </> verificationKeyFile keyNames
     sKeyPath = basePath </> signingKeyFile keyNames
@@ -114,12 +122,46 @@ data VKey
 data SKey
 
 data OperatorCounter
+data ByronKey
 
 newtype File a = File {unFile :: FilePath}
   deriving (Show, Eq)
+
+-- When all uses of fakeIt are removed the cleanup is done
+
+fakeIt :: FilePath -> File a
+fakeIt = File
 
 getVKeyPath ::  (File (a VKey), File (a SKey)) -> FilePath
 getVKeyPath (File a, _ ) = a
 
 getSKeyPath ::  (File (a VKey), File (a SKey)) -> FilePath
 getSKeyPath (_, File a) = a
+
+--byron
+cliKeyGen :: FilePath -> FilePath -> H.Integration (File ByronKey)
+cliKeyGen tmp key = do
+  let keyPath = tmp </> key
+  execCli_
+      [ "keygen"
+      , "--secret", keyPath
+      ]
+  return $ File keyPath
+
+data ByronAddress
+
+cliSigningKeyAddress
+  :: FilePath
+  -> Int
+  -> File ByronKey
+  -> FilePath
+  -> H.Integration (File ByronAddress)
+cliSigningKeyAddress tmp testnetMagic (File key) destPath = do
+  let addrPath = tmp </> destPath
+  addr <- execCli
+      [ "signing-key-address"
+      , "--testnet-magic", show testnetMagic
+      , "--secret", tmp </> key
+      ]
+  H.writeFile addrPath addr
+  return $ File addrPath

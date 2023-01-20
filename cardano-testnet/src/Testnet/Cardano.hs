@@ -3,6 +3,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeApplications #-}
 {-# OPTIONS_GHC -Wno-unused-do-bind #-}
+{-# OPTIONS_GHC -Wno-unused-matches #-}
 
 module Testnet.Cardano
   ( ForkPoint(..)
@@ -159,29 +160,32 @@ mkTopologyConfig numNodes allPorts port True = J.encode topologyP2P
         (P2P.UseLedger DontUseLedger)
 
 cardanoTestnet :: CardanoTestnetOptions -> H.Conf -> H.Integration TestnetRuntime
-cardanoTestnet testnetOptions configuration = do
+cardanoTestnet testnetOptions configuration@H.Conf {tempAbsPath, testnetMagic} = do
   void $ H.note OS.os
   currentTime <- H.noteShowIO DTC.getCurrentTime
   startTime <- H.noteShow $ DTC.addUTCTime startTimeOffsetSeconds currentTime
   
-  cardanoTestnetPart1 testnetOptions configuration startTime
-  cardanoTestnetPart2 testnetOptions configuration
-  cardanoTestnetPart3 testnetOptions configuration
-  cardanoTestnetPart4 testnetOptions configuration startTime
+  cardanoTestnetByronGenesis testnetOptions configuration startTime
+  cardanoTestnetByronGenesisExpenditure testnetOptions configuration
+  cardanoTestnetByronGovernance
+    (L.length $ cardanoBftNodeOptions testnetOptions)
+    testnetMagic
+    tempAbsPath
+  cardanoTestnetShelleyGenesis testnetOptions configuration startTime
   poolKeys <- cardanoTestnetPart5 testnetOptions configuration
 
   wallets <- cardanoTestnetPart6 testnetOptions configuration
   cardanoTestnetPart7 testnetOptions configuration
-  testnetRuntime <- cardanoTestnetPart8 testnetOptions configuration poolKeys wallets
+  testnetRuntime <- cardanoTestnetLaunchCluster testnetOptions configuration poolKeys wallets
   return testnetRuntime
 
 
-cardanoTestnetPart1
+cardanoTestnetByronGenesis
   :: CardanoTestnetOptions
   -> H.Conf
   -> DTC.UTCTime
   -> H.Integration ()
-cardanoTestnetPart1 testnetOptions H.Conf {..} startTime = do
+cardanoTestnetByronGenesis testnetOptions H.Conf {..} startTime = do
 
   let numBftNodes = L.length (cardanoBftNodeOptions testnetOptions)
       bftNodesN = [1 .. numBftNodes]
@@ -319,64 +323,48 @@ cardanoTestnetPart1 testnetOptions H.Conf {..} startTime = do
     H.createFileLink (tempAbsPath </> "byron/delegate-keys.00" <> show @Int (n - 1) <> ".key") (tempAbsPath </> "node-bft" <> show @Int n </> "byron/delegate.key")
     H.createFileLink (tempAbsPath </> "byron/delegation-cert.00" <> show @Int (n - 1) <> ".json") (tempAbsPath </> "node-bft" <> show @Int n </> "byron/delegate.cert")
 
-
--- End Of Part1 Start Of Part2
-
-cardanoTestnetPart2 :: CardanoTestnetOptions -> H.Conf -> H.Integration ()
-cardanoTestnetPart2 testnetOptions H.Conf {..} = do
+cardanoTestnetByronGenesisExpenditure :: CardanoTestnetOptions -> H.Conf -> H.Integration ()
+cardanoTestnetByronGenesisExpenditure testnetOptions H.Conf {..} = do
 
   let numBftNodes = L.length (cardanoBftNodeOptions testnetOptions)
-      bftNodesN = [1 .. numBftNodes]
-      maxByronSupply = 10020000000
-      fundsPerGenesisAddress = maxByronSupply `div` numBftNodes
-      fundsPerByronAddress = fundsPerGenesisAddress - 100000000
 
 -- End Of Part1 Start Of Part2
 
   -- Create keys and addresses to withdraw the initial UTxO into
-  forM_ bftNodesN $ \n -> do
-    execCli_
-      [ "keygen"
-      , "--secret", tempAbsPath </> "byron/payment-keys.00" <> show @Int (n - 1) <> ".key"
-      ]
+  byronAddress0:_ <- forM [1 .. numBftNodes] $ \n -> do
+    skey <- cliKeyGen tempAbsPath $ "byron/payment-keys.00" <> show @Int (n - 1) <> ".key"
+    cliSigningKeyAddress tempAbsPath testnetMagic skey $ "byron/address-00" <> show @Int (n - 1)
 
-    H.execCli
-      [ "signing-key-address"
-      , "--testnet-magic", show @Int testnetMagic
-      , "--secret", tempAbsPath </> "byron/payment-keys.00" <> show @Int (n - 1) <> ".key"
-      ] >>= H.writeFile (tempAbsPath </> "byron/address-00" <> show @Int (n - 1))
+  byronGensisAddress0:_ <- forM [1 .. numBftNodes] $ \n -> do
+    cliSigningKeyAddress tempAbsPath testnetMagic
+      (fakeIt $ "byron/genesis-keys.00" <> show @Int (n - 1) <> ".key")
+      ("byron/genesis-address-00" <> show @Int (n - 1))
+  
+  richAddrFrom <- S.firstLine <$> H.readFile (tempAbsPath </> "byron/genesis-address-000")
+  txAddr <- S.firstLine <$> H.readFile (unFile byronAddress0)
+  let
+      maxByronSupply = 10020000000
+      fundsPerGenesisAddress = maxByronSupply `div` numBftNodes
+      fundsPerByronAddress = fundsPerGenesisAddress - 100000000
 
-    -- Write Genesis addresses to files
-    H.execCli
-      [ "signing-key-address"
-      , "--testnet-magic", show @Int testnetMagic
-      , "--secret", tempAbsPath </> "byron/genesis-keys.00" <> show @Int (n - 1) <> ".key"
-      ] >>= H.writeFile (tempAbsPath </> "byron/genesis-address-00" <> show @Int (n - 1))
+  -- Create Byron address that moves funds out of the genesis UTxO into a regular
+  -- address.
+  execCli_
+    [ "issue-genesis-utxo-expenditure"
+    , "--genesis-json", tempAbsPath </> "byron/genesis.json"
+    , "--testnet-magic", show @Int testnetMagic
+    , "--tx", tempAbsPath </> "tx0.tx"
+    , "--wallet-key", tempAbsPath </> "byron/delegate-keys.000.key"
+    , "--rich-addr-from", richAddrFrom
+    , "--txout", show @(String, Int) (txAddr, fundsPerByronAddress) -- should read FundsPerByronAddress from genesis!
+    ]
 
-  do
-    richAddrFrom <- S.firstLine <$> H.readFile (tempAbsPath </> "byron/genesis-address-000")
-    txAddr <- S.firstLine <$> H.readFile (tempAbsPath </> "byron/address-000")
-
-    -- Create Byron address that moves funds out of the genesis UTxO into a regular
-    -- address.
-    execCli_
-      [ "issue-genesis-utxo-expenditure"
-      , "--genesis-json", tempAbsPath </> "byron/genesis.json"
-      , "--testnet-magic", show @Int testnetMagic
-      , "--tx", tempAbsPath </> "tx0.tx"
-      , "--wallet-key", tempAbsPath </> "byron/delegate-keys.000.key"
-      , "--rich-addr-from", richAddrFrom
-      , "--txout", show @(String, Int) (txAddr, fundsPerByronAddress)
-      ]
-
--- End Of Part2 Start Of Part3
-cardanoTestnetPart3 :: CardanoTestnetOptions -> H.Conf -> H.Integration ()
-cardanoTestnetPart3 testnetOptions H.Conf {..} = do
-
-  let numBftNodes = L.length (cardanoBftNodeOptions testnetOptions)
-      bftNodesN = [1 .. numBftNodes]
-
--- End Of Part2 Start Of Part3
+cardanoTestnetByronGovernance
+  :: Int
+  -> Int
+  -> FilePath
+  -> H.Integration ()
+cardanoTestnetByronGovernance numBftNodes testnetMagic tempAbsPath = do
 
   -- Update Proposal and votes
   execCli_
@@ -393,7 +381,7 @@ cardanoTestnetPart3 testnetOptions H.Conf {..} = do
     , "--installer-hash", "0"
     ]
 
-  forM_ bftNodesN $ \n -> do
+  forM_ [1 .. numBftNodes] $ \n -> do
     execCli_
       [ "byron", "governance", "create-proposal-vote"
       , "--proposal-filepath", tempAbsPath </> "update-proposal"
@@ -417,7 +405,7 @@ cardanoTestnetPart3 testnetOptions H.Conf {..} = do
     , "--installer-hash", "0"
     ]
 
-  forM_ bftNodesN $ \n ->
+  forM_ [1 .. numBftNodes] $ \n ->
     execCli_
       [ "byron", "governance", "create-proposal-vote"
       , "--proposal-filepath", tempAbsPath </> "update-proposal-1"
@@ -426,22 +414,18 @@ cardanoTestnetPart3 testnetOptions H.Conf {..} = do
       , "--vote-yes"
       , "--output-filepath", tempAbsPath </> "update-vote-1.00" <> show @Int (n - 1)
       ]
+  -- Generated genesis keys and genesis files
+  H.noteEachM_ . H.listDirectory $ tempAbsPath </> "byron"
 
--- End Of Part3 Start Of Part4
-cardanoTestnetPart4
+cardanoTestnetShelleyGenesis
   :: CardanoTestnetOptions
   -> H.Conf
   -> DTC.UTCTime
   -> H.Integration ()
-cardanoTestnetPart4 testnetOptions H.Conf {..} startTime = do
+cardanoTestnetShelleyGenesis testnetOptions H.Conf {..} startTime = do
 
   let numBftNodes = L.length (cardanoBftNodeOptions testnetOptions)
       maxShelleySupply = 1000000000000
-
--- End Of Part3 Start Of Part4
-
-  -- Generated genesis keys and genesis files
-  H.noteEachM_ . H.listDirectory $ tempAbsPath </> "byron"
 
   -- Set up our template
   H.createDirectoryIfMissing $ tempAbsPath </> "shelley"
@@ -509,8 +493,6 @@ cardanoTestnetPart4 testnetOptions H.Conf {..} startTime = do
 
   -- Make the pool operator cold keys
   -- This was done already for the BFT nodes as part of the genesis creation
-
--- End Of Part4 Start Of Part5
 cardanoTestnetPart5 :: CardanoTestnetOptions -> H.Conf -> H.Integration [PoolNodeKeys]
 cardanoTestnetPart5 testnetOptions H.Conf {..} = do
 
@@ -520,8 +502,6 @@ cardanoTestnetPart5 testnetOptions H.Conf {..} = do
       bftNodeNames = ("node-bft" <>) . show @Int <$> bftNodesN
       poolNodeNames = ("node-pool" <>) . show @Int <$> poolNodesN
       allNodeNames = bftNodeNames <> poolNodeNames
-
--- End Of Part4 Start Of Part5
 
   poolKeys <- forM poolNodesN $ \i -> do
     let node = "node-pool" <> show @Int i
@@ -638,15 +618,12 @@ cardanoTestnetPart6 testnetOptions H.Conf {..} = do
       }
   return wallets
 
--- End Of Part6 Start Of Part7
 cardanoTestnetPart7 :: CardanoTestnetOptions -> H.Conf -> H.Integration ()
 cardanoTestnetPart7 testnetOptions H.Conf {..} = do
 
   let poolNodesN = [1 .. cardanoNumPoolNodes testnetOptions]
       poolNodeNames = ("node-pool" <>) . show @Int <$> poolNodesN
       maxShelleySupply = 1000000000000
-
--- End Of Part6 Start Of Part7
 
   -- user N will delegate to pool N
   forM_ poolNodesN $ \n -> do
@@ -776,14 +753,13 @@ cardanoTestnetPart7 testnetOptions H.Conf {..} = do
     . HM.insert "ShelleyGenesisHash" shelleyGenesisHash
     . HM.insert "AlonzoGenesisHash" alonzoGenesisHash
 
--- End Of Part7 Start Of Part8
-cardanoTestnetPart8
+cardanoTestnetLaunchCluster
   :: CardanoTestnetOptions
   -> H.Conf
   -> [PoolNodeKeys]
   -> [PaymentKeyPair]
   -> H.Integration TestnetRuntime
-cardanoTestnetPart8 testnetOptions H.Conf {..} poolKeys wallets = do
+cardanoTestnetLaunchCluster testnetOptions H.Conf {..} poolKeys wallets = do
 
   let numBftNodes = L.length (cardanoBftNodeOptions testnetOptions)
       bftNodesN = [1 .. numBftNodes]
@@ -792,7 +768,6 @@ cardanoTestnetPart8 testnetOptions H.Conf {..} poolKeys wallets = do
       poolNodeNames = ("node-pool" <>) . show @Int <$> poolNodesN
       allNodeNames = bftNodeNames <> poolNodeNames
 
--- End Of Part7 Start Of Part8
   configurationFile <- H.noteShow $ tempAbsPath </> "configuration.yaml"
   --------------------------------
   -- Launch cluster of three nodes
