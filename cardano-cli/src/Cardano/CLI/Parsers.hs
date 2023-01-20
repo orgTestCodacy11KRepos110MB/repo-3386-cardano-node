@@ -26,9 +26,9 @@ opts =
   Opt.info (parseClientCommand <**> Opt.helper)
     ( Opt.fullDesc
       <> Opt.header
-      "cardano-cli - utility to support a variety of key\
-      \ operations (genesis generation, migration,\
-      \ pretty-printing..) for different system generations."
+      "cardano-cli - General purpose command-line utility to interact with cardano-node.\
+      \ Provides specific commands to manage keys, addresses, build & submit transactions, \
+      \ certificates, etc."
     )
 
 pref :: ParserPrefs
