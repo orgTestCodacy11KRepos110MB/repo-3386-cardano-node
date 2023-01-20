@@ -7,9 +7,10 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module  Cardano.TxGenerator.PlutusContext
-        ( PlutusAutoBudgetSummary(..)
-        , PlutusAutoLimitingFactor(..)
+        ( PlutusAutoLimitingFactor(..)
+        , PlutusBudgetSummary(..)
         , plutusAutoBudgetMaxOut
+        , plutusBudgetSummary
         , readScriptData
         , scriptDataModifyNumber
         )
@@ -21,28 +22,32 @@ import           Control.Monad.Trans.Except.Extra
 import           Data.Aeson as Aeson
 
 import           Cardano.Api
-import           Cardano.Api.Shelley (ProtocolParameters)
+import           Cardano.Api.Shelley (ProtocolParameters (..))
 
 import           Cardano.TxGenerator.Setup.Plutus (preExecutePlutusScript)
 import           Cardano.TxGenerator.Types
 
 
-data PlutusAutoBudgetSummary =
-  PlutusAutoBudgetSummary
-  { budgetPerTx         :: !ExecutionUnits
-  , budgetPerTxInput    :: !ExecutionUnits
-  , scriptId            :: !FilePath
-  , loopCounter         :: !Integer
-  , loopLimitingFactors :: ![PlutusAutoLimitingFactor]
-  , budgetUsed          :: !ExecutionUnits
-  , scriptDatum         :: !ScriptData
-  , scriptRedeemer      :: !ScriptData
+data PlutusBudgetSummary =
+  PlutusBudgetSummary
+  { budgetPerBlock          :: !ExecutionUnits
+  , budgetPerTx             :: !ExecutionUnits
+  , budgetPerTxInput        :: !ExecutionUnits
+  , budgetFractionPerInput  :: !Double
+  , scriptId                :: !FilePath
+  , loopCounter             :: !Integer
+  , loopLimitingFactors     :: ![PlutusAutoLimitingFactor]
+  , budgetUsedPerTxInput    :: !ExecutionUnits
+  , scriptArgDatum          :: !ScriptData
+  , scriptArgRedeemer       :: !ScriptData
+  , txPerBlockProjected     :: !Int
+  , txSizeProjected         :: !(Maybe Int)
   }
   deriving (Generic, ToJSON)
 
 data PlutusAutoLimitingFactor
   = ExceededMemoryLimit
-  | ExceededExecutionLimit
+  | ExceededStepLimit
   deriving (Generic, Eq, Show, ToJSON)
 
 instance ToJSON ScriptData where
@@ -82,8 +87,41 @@ plutusAutoBudgetMaxOut protocolParams script pab@PlutusAutoBudget{..}
     isInLimits :: Integer -> Either TxGenError [PlutusAutoLimitingFactor]
     isInLimits n = do
       used <- preExecutePlutusScript protocolParams script autoBudgetDatum (toLoopArgument n)
-      pure $   [ExceededExecutionLimit | executionSteps used > executionSteps autoBudgetUnits]
-            ++ [ExceededMemoryLimit    | executionMemory used > executionMemory autoBudgetUnits]
+      pure $   [ExceededStepLimit   | executionSteps used > executionSteps autoBudgetUnits]
+            ++ [ExceededMemoryLimit | executionMemory used > executionMemory autoBudgetUnits]
+
+plutusBudgetSummary ::
+     ProtocolParameters
+  -> FilePath
+  -> (PlutusAutoBudget, Integer, [PlutusAutoLimitingFactor])
+  -> ExecutionUnits
+  -> Int
+  -> PlutusBudgetSummary
+plutusBudgetSummary
+  ProtocolParameters
+    { protocolParamMaxBlockExUnits  = Just budgetPerBlock
+    , protocolParamMaxTxExUnits     = Just budgetPerTx
+    }
+  scriptId
+  (PlutusAutoBudget{..}, loopCounter, loopLimitingFactors)
+  budgetUsedPerTxInput
+  txInputs
+    = PlutusBudgetSummary{..}
+  where
+    txSizeProjected         = Nothing           -- we defer this value until after splitting phase
+    scriptArgDatum          = autoBudgetDatum
+    scriptArgRedeemer       = autoBudgetRedeemer
+    budgetPerTxInput        = autoBudgetUnits
+    budgetFractionPerInput  = 1.0 / fromIntegral txInputs
+    txPerBlockProjected     = fromIntegral $ min
+                                (executionSteps budgetPerBlock  `div` totalSteps)
+                                (executionMemory budgetPerBlock `div` totalMemory)
+    totalSteps              = fromIntegral txInputs * executionSteps autoBudgetUnits
+    totalMemory             = fromIntegral txInputs * executionMemory autoBudgetUnits
+
+plutusBudgetSummary _ _ _ _ _
+  = error "plutusBudgetSummary : call to function in pre-Alonzo era. This is an implementation error in tx-generator."
+
 
 -- modifies the first ScriptDataNumber encountered during traversal to the value provided
 scriptDataModifyNumber :: (Integer -> Integer) -> ScriptData -> ScriptData

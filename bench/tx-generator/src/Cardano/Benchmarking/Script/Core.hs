@@ -332,9 +332,15 @@ evalGenerator generator txParams@TxGenTxParams{txParamFee = fee} era = do
         sourceToStore = sourceToStoreTransactionNew txGenerator fundSource inToOut (mangle $ repeat toUTxO)
 
       fundPreview <- liftIO $ walletPreview wallet inputs
-      traceDebug $ case sourceTransactionPreview txGenerator fundPreview inToOut (mangle $ repeat toUTxO) of
-        Left err  -> "Error creating Tx preview: " ++ show err
-        Right tx  -> "Projected Tx size in bytes: " ++ show (txSizeInBytes tx)
+      case sourceTransactionPreview txGenerator fundPreview inToOut (mangle $ repeat toUTxO) of
+        Left err -> traceDebug $ "Error creating Tx preview: " ++ show err
+        Right tx -> do
+          let txSize = txSizeInBytes tx
+          summary_ <- getEnvSummary
+          forM_ summary_ $
+            \summary -> setEnvSummary summary {txSizeProjected = Just txSize}
+          traceDebug $ "Projected Tx size in bytes: " ++ show txSize
+          dumpBudgetSummaryIfExisting
 
       return $ Streaming.effect (Streaming.yield <$> sourceToStore)
 
@@ -450,22 +456,11 @@ makePlutusContext ScriptSpec{..} = do
 
       case plutusAutoBudgetMaxOut protocolParameters script autoBudget of
         Left err -> liftTxGenError err
-        Right (PlutusAutoBudget{..}, loopCalibration, limitFactors) -> do
+        Right result@(PlutusAutoBudget{..}, _, _) -> do
           preRun <- preExecuteScriptAction protocolParameters script autoBudgetDatum autoBudgetRedeemer
-          let
-            summary = PlutusAutoBudgetSummary
-              { budgetPerTx         = perTxBudget
-              , budgetPerTxInput    = budget
-              , scriptId            = scriptSpecFile
-              , loopCounter         = loopCalibration
-              , loopLimitingFactors = limitFactors
-              , budgetUsed          = preRun
-              , scriptDatum         = autoBudgetDatum
-              , scriptRedeemer      = autoBudgetRedeemer
-              }
-            summaryFile = "plutus-auto-budget-summary.json"
-          liftIO $ BSL.writeFile summaryFile $ prettyPrintOrdered summary
-          traceDebug $ "makePlutusContext : auto budget calibration summary saved in: " ++ summaryFile
+          setEnvSummary $
+            plutusBudgetSummary protocolParameters scriptSpecFile result preRun budgetFraction
+          dumpBudgetSummaryIfExisting
           return (autoBudgetDatum, autoBudgetRedeemer, preRun)
 
   let msg = mconcat [ "Plutus Benchmark :"
@@ -513,6 +508,16 @@ preExecuteScriptAction protocolParameters script scriptData redeemer
   = case Plutus.preExecutePlutusScript protocolParameters script scriptData redeemer of
       Left err -> throwE $ WalletError ( "makePlutusContext preExecuteScript failed: " ++ show err )
       Right costs -> return costs
+
+dumpBudgetSummaryIfExisting :: ActionM ()
+dumpBudgetSummaryIfExisting
+  = do
+    summary_ <- getEnvSummary
+    forM_ summary_ $ \summary -> do
+      liftIO $ BSL.writeFile summaryFile $ prettyPrintOrdered summary
+      traceDebug $ "dumpBudgetSummaryIfExisting : budget summary created/updated in: " ++ summaryFile
+  where
+    summaryFile = "plutus-budget-summary.json"
 
 traceTxGeneratorVersion :: ActionM ()
 traceTxGeneratorVersion = traceBenchTxSubmit TraceTxGeneratorVersion Version.txGeneratorVersion
