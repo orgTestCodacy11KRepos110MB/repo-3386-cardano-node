@@ -90,7 +90,7 @@ local op=${1:-$run_default_op}; test $# -gt 0 && shift
 
 case "$op" in
     get-rundir )
-        echo $global_rundir;;
+        realpath --relative-to "$(pwd)" "$global_rundir";;
 
     list-runs | runs | lsr )
         local usage="USAGE: wb run $op [--remote | -r]"
@@ -210,7 +210,7 @@ case "$op" in
     describe )
         local usage="USAGE: wb run $op RUN"
         local run=${1:?$usage}
-        local dir=$global_rundir/$run
+        local dir=$(run get $run)
 
         if ! run check "$run"
         then fatal "run fails sanity checks:  $run at $dir"; fi
@@ -270,7 +270,7 @@ EOF
     compute-path )
         if test -f "$1/meta.json"
         then echo -n "$1"
-        else echo -n "$global_rundir/$1"
+        else realpath --relative-to "$(pwd)" "$global_rundir/$1"
         fi;;
 
     check )
@@ -355,7 +355,7 @@ EOF
         ln -s $run "$global_rundir"/current;;
 
     current-run-path | current-path | path )
-        realpath "$global_rundir"/current;;
+        realpath --relative-to "$(pwd)" "$global_rundir"/current;;
 
     current-run-tag | current-tag | tag | current )
         basename "$(run current-path)";;
@@ -437,7 +437,7 @@ EOF
         progress "run | tag" "allocated run identifier (tag):  $(with_color white $run)"
 
         ## 4. allocate directory:
-        local dir=$global_rundir/$run
+        local dir=$(realpath --relative-to "$(pwd)" "$global_rundir/$run")
         local realdir=$(realpath --canonicalize-missing "$dir")
 
         test "$(dirname "$realdir")" = "$(realpath "$global_rundir")" ||
