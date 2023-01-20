@@ -625,9 +625,9 @@ runQueryPoolState (AnyConsensusModeParams cModeParams) network poolIds = do
                            $ newExceptT readEnvSocketPath
   let localNodeConnInfo = LocalNodeConnectInfo cModeParams network sockPath
 
-  anyE@(AnyCardanoEra era) <-
-    firstExceptT ShelleyQueryCmdAcquireFailure
-      . newExceptT $ determineEra cModeParams localNodeConnInfo
+  anyE@(AnyCardanoEra era) <- OO.runOopsInExceptT @ShelleyQueryCmdError $ do
+    determineEra_ cModeParams localNodeConnInfo
+      & OO.catch @AcquireFailure (\e -> OO.throw $ ShelleyQueryCmdAcquireFailure $ toAcquiringFailure e)
 
   let cMode = consensusModeOnly cModeParams
   sbe <- getSbe $ cardanoEraStyle era
@@ -684,9 +684,9 @@ runQueryStakeSnapshot (AnyConsensusModeParams cModeParams) network allOrOnlyPool
   SocketPath sockPath <- firstExceptT ShelleyQueryCmdEnvVarSocketErr $ newExceptT readEnvSocketPath
   let localNodeConnInfo = LocalNodeConnectInfo cModeParams network sockPath
 
-  anyE@(AnyCardanoEra era) <-
-    firstExceptT ShelleyQueryCmdAcquireFailure
-      . newExceptT $ determineEra cModeParams localNodeConnInfo
+  anyE@(AnyCardanoEra era) <- OO.runOopsInExceptT @ShelleyQueryCmdError $ do
+    determineEra_ cModeParams localNodeConnInfo
+      & OO.catch @AcquireFailure (\e -> OO.throw $ ShelleyQueryCmdAcquireFailure $ toAcquiringFailure e)
 
   let cMode = consensusModeOnly cModeParams
   sbe <- getSbe $ cardanoEraStyle era
@@ -1198,9 +1198,9 @@ runQueryLeadershipSchedule (AnyConsensusModeParams cModeParams) network
                            $ newExceptT readEnvSocketPath
   let localNodeConnInfo = LocalNodeConnectInfo cModeParams network sockPath
 
-  anyE@(AnyCardanoEra era) <-
-    firstExceptT ShelleyQueryCmdAcquireFailure
-      . newExceptT $ determineEra cModeParams localNodeConnInfo
+  anyE@(AnyCardanoEra era) <- OO.runOopsInExceptT @ShelleyQueryCmdError $ do
+    determineEra_ cModeParams localNodeConnInfo
+      & OO.catch @AcquireFailure (\e -> OO.throw $ ShelleyQueryCmdAcquireFailure $ toAcquiringFailure e)
 
   sbe <- getSbe $ cardanoEraStyle era
   let cMode = consensusModeOnly cModeParams
