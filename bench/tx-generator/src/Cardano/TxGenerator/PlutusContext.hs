@@ -43,7 +43,7 @@ data PlutusBudgetSummary =
   , txPerBlockProjected     :: !Int
   , txSizeProjected         :: !(Maybe Int)
   }
-  deriving (Generic, ToJSON)
+  deriving (Generic, Show, ToJSON)
 
 data PlutusAutoLimitingFactor
   = ExceededMemoryLimit

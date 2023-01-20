@@ -336,10 +336,12 @@ evalGenerator generator txParams@TxGenTxParams{txParamFee = fee} era = do
         Left err -> traceDebug $ "Error creating Tx preview: " ++ show err
         Right tx -> do
           let txSize = txSizeInBytes tx
-          summary_ <- getEnvSummary
-          forM_ summary_ $
-            \summary -> setEnvSummary summary {txSizeProjected = Just txSize}
           traceDebug $ "Projected Tx size in bytes: " ++ show txSize
+          summary_ <- getEnvSummary
+          forM_ summary_ $ \summary -> do
+            let summary' = summary {txSizeProjected = Just txSize}
+            setEnvSummary summary'
+            traceBenchTxSubmit TraceBenchPlutusBudgetSummary summary'
           dumpBudgetSummaryIfExisting
 
       return $ Streaming.effect (Streaming.yield <$> sourceToStore)
