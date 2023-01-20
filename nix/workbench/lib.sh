@@ -76,6 +76,9 @@ usage() {
     exit 1
 }
 
+muffle_trace_set_exit='if test -n "$(echo $- | tr -cd x)"; then set +x; local exit="set -x"; else local exit=; fi'
+restore_trace='eval $exit'
+
 declare -A colormap
 colormap=(
     [black]=30
@@ -104,19 +107,15 @@ colorise_colors=(
     red green blue yellow white cyan
 )
 colorise() {
-    ## Disable tracing locally:
-    if test -n "$(echo $- | tr -cd x)"
-    then set +x
-         local exit='set -x'
-    else local exit=
-    fi
+    eval $muffle_trace_set_exit
 
     local i
     for ((i=0; $#!=0; i++))
     do echo -n "$(with_color ${colorise_colors[$((i % 6))]} $1) "
        shift
     done
-    eval $exit
+
+    eval $restore_trace
 }
 
 newline() {
@@ -160,28 +159,46 @@ red() {
 }
 
 verbose() {
+    eval $muffle_trace_set_exit
+
     if test -n "${verbose:-}"
     then local subsys=$1; shift
          msg "$(with_color blue $subsys):  $*"
     fi
+
+    eval $restore_trace
 }
 
 progress() {
+    eval $muffle_trace_set_exit
+
     local subsys=$1; shift
     msg "$(with_color green $subsys):  $(with_color blue "$@")"
+
+    eval $restore_trace
 }
 
 progress_ne() {
+    eval $muffle_trace_set_exit
+
     local subsys=$1; shift
     msg_ne "$(with_color green $subsys):  $(with_color blue "$@")"
+
+    eval $restore_trace
 }
 
 warn() {
+    eval $muffle_trace_set_exit
+
     local subsys=$1; shift
     msg "$(with_color green $subsys):  $(with_color yellow "$@")"
+
+    eval $restore_trace
 }
 
 fail() {
+    eval $muffle_trace_set_exit
+
     msg "$(with_color red $*)"
     exit 1
 }

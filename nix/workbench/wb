@@ -173,9 +173,6 @@ start()
         --supervisor | --backend-supervisor )
                                          backend=supervisor;;
 
-        --verbose | -v )                 export verbose=t;;
-        --trace | --debug )              set -x;;
-        --trace-wb | --trace-workbench ) export WB_EXTRA_FLAGS=--trace;;
         --help )                         usage_start
                                          exit 1;;
         * ) fatal "while parsing remaining 'wb start' args:  $*";;
@@ -248,10 +245,10 @@ finish()
 pass_flags=()
 while test $# -gt 0
 do case "$1" in
-       --cls )
-           echo -en "\ec">&2;;
-       --trace | --debug )
-           set -x;;
+       --cls )                          echo -en "\ec">&2;;
+       --verbose | -v )                 export verbose=t;;
+       --trace | --debug )              set -x;;
+       --trace-wb | --trace-workbench ) export WB_EXTRA_FLAGS=--trace;;
        --help )
            usage_main; exit 1;;
        --help-full | --help-all | --help-extra | --help-aliases | --aliases )
