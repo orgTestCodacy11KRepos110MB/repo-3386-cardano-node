@@ -22,7 +22,7 @@ import           Cardano.Prelude hiding (All, Any)
 import           Prelude (String, error)
 
 import           Control.Monad.Trans.Except.Extra (firstExceptT, hoistEither, hoistMaybe, left,
-                   newExceptT, onLeft)
+                   newExceptT, onLeft, onNothing)
 import           Data.Aeson.Encode.Pretty (encodePretty)
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as LBS
@@ -303,6 +303,11 @@ runTransactionCmd cmd =
 -- Building transactions
 --
 
+isCardanoMode :: ConsensusMode mode -> Bool
+isCardanoMode = \case
+  CardanoMode -> True
+  _ -> False
+
 runTxBuildCmd
   :: AnyCardanoEra
   -> AnyConsensusModeParams
@@ -399,40 +404,42 @@ runTxBuildCmd
   case outputOptions of
     OutputScriptCostOnly fp -> do
       let BuildTxWith mTxProtocolParams = txProtocolParams txBodycontent
-      case mTxProtocolParams of
-        Just pparams ->
-         case protocolParamPrices pparams of
-           Just executionUnitPrices -> do
-             let consensusMode = consensusModeOnly cModeParams
-             case consensusMode of
-               CardanoMode -> do
-                 (nodeEraUTxO, _, eraHistory, systemStart, _)
-                   <- firstExceptT ShelleyTxCmdQueryConvenienceError
-                         . newExceptT $ queryStateForBalancedTx nodeEra nid allTxInputs
-                 case toEraInMode cEra CardanoMode of
-                   Just eInMode -> do
-                     -- Why do we cast the era? The user can specify an era prior to the era that the node is currently in.
-                     -- We cannot use the user specified era to construct a query against a node because it may differ
-                     -- from the node's era and this will result in the 'QueryEraMismatch' failure.
-                     txEraUtxo <- case first ShelleyTxCmdTxEraCastErr (eraCast cEra nodeEraUTxO) of
-                                    Right txEraUtxo -> return txEraUtxo
-                                    Left e -> left e
 
-                     scriptExecUnitsMap <- firstExceptT ShelleyTxCmdTxExecUnitsErr $ hoistEither
-                                             $ evaluateTransactionExecutionUnits
-                                                 eInMode systemStart eraHistory
-                                                 pparams txEraUtxo balancedTxBody
-                     scriptCostOutput <- firstExceptT ShelleyTxCmdPlutusScriptCostErr $ hoistEither
-                                           $ renderScriptCosts
-                                               txEraUtxo
-                                               executionUnitPrices
-                                               (collectTxBodyScriptWitnesses txBodycontent)
-                                               scriptExecUnitsMap
-                     liftIO $ LBS.writeFile fp $ encodePretty scriptCostOutput
-                   Nothing -> left $ ShelleyTxCmdUnsupportedMode (AnyConsensusMode consensusMode)
-               _ -> left ShelleyTxCmdPlutusScriptsRequireCardanoMode
-           Nothing -> left ShelleyTxCmdPParamExecutionUnitsNotAvailable
-        Nothing -> left ShelleyTxCmdProtocolParametersNotPresentInTxBody
+      pparams <- pure mTxProtocolParams
+        & onNothing (left ShelleyTxCmdProtocolParametersNotPresentInTxBody)
+
+      executionUnitPrices <- pure (protocolParamPrices pparams)
+        & onNothing (left ShelleyTxCmdPParamExecutionUnitsNotAvailable)
+
+      let consensusMode = consensusModeOnly cModeParams
+
+      unless (isCardanoMode consensusMode) $ left ShelleyTxCmdPlutusScriptsRequireCardanoMode
+
+      (nodeEraUTxO, _, eraHistory, systemStart, _)
+          <- firstExceptT ShelleyTxCmdQueryConvenienceError
+                . newExceptT $ queryStateForBalancedTx nodeEra nid allTxInputs
+
+      eInMode <- pure (toEraInMode cEra CardanoMode)
+        & onNothing (throwE (ShelleyTxCmdUnsupportedMode (AnyConsensusMode consensusMode)))
+
+      -- Why do we cast the era? The user can specify an era prior to the era that the node is currently in.
+      -- We cannot use the user specified era to construct a query against a node because it may differ
+      -- from the node's era and this will result in the 'QueryEraMismatch' failure.
+      txEraUtxo <- case first ShelleyTxCmdTxEraCastErr (eraCast cEra nodeEraUTxO) of
+                    Right txEraUtxo -> return txEraUtxo
+                    Left e -> left e
+
+      scriptExecUnitsMap <- firstExceptT ShelleyTxCmdTxExecUnitsErr $ hoistEither
+                              $ evaluateTransactionExecutionUnits
+                                  eInMode systemStart eraHistory
+                                  pparams txEraUtxo balancedTxBody
+      scriptCostOutput <- firstExceptT ShelleyTxCmdPlutusScriptCostErr $ hoistEither
+                            $ renderScriptCosts
+                                txEraUtxo
+                                executionUnitPrices
+                                (collectTxBodyScriptWitnesses txBodycontent)
+                                scriptExecUnitsMap
+      liftIO $ LBS.writeFile fp $ encodePretty scriptCostOutput
     OutputTxBodyOnly (TxBodyFile fpath) ->
       let noWitTx = makeSignedTransaction [] balancedTxBody
       in  lift (writeTxFileTextEnvelopeCddl fpath noWitTx)
