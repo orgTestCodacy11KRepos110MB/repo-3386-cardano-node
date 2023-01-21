@@ -442,8 +442,9 @@ runTxBuildCmd
         Nothing -> left ShelleyTxCmdProtocolParametersNotPresentInTxBody
     OutputTxBodyOnly (TxBodyFile fpath) ->
       let noWitTx = makeSignedTransaction [] balancedTxBody
-      in firstExceptT ShelleyTxCmdWriteFileError . newExceptT $
-           writeTxFileTextEnvelopeCddl fpath noWitTx
+      in  lift (writeTxFileTextEnvelopeCddl fpath noWitTx)
+            & onLeft (throwE . ShelleyTxCmdWriteFileError)
+
 
 runTxBuildRawCmd
   :: AnyCardanoEra
@@ -512,8 +513,9 @@ runTxBuildRawCmd
                           txMetadata pparams mProp
 
   let noWitTx = makeSignedTransaction [] txBody
-  firstExceptT ShelleyTxCmdWriteFileError . newExceptT $
-    getIsCardanoEraConstraint cEra $ writeTxFileTextEnvelopeCddl out noWitTx
+  lift (getIsCardanoEraConstraint cEra $ writeTxFileTextEnvelopeCddl out noWitTx)
+    & onLeft (throwE . ShelleyTxCmdWriteFileError)
+
 
 runTxBuildRaw
   :: CardanoEra era
@@ -1073,8 +1075,8 @@ runTxSign txOrTxBody witSigningData mnw (TxFile outTxFile) = do
           allKeyWits = existingTxKeyWits ++ newShelleyKeyWits ++ byronWitnesses
           signedTx = makeSignedTransaction allKeyWits txbody
 
-      firstExceptT ShelleyTxCmdWriteFileError . newExceptT $
-        writeTxFileTextEnvelopeCddl outTxFile signedTx
+      lift (writeTxFileTextEnvelopeCddl outTxFile signedTx)
+        & onLeft (throwE . ShelleyTxCmdWriteFileError)
 
     (InputTxBodyFile (TxBodyFile txbodyFile)) -> do
       unwitnessed <- firstExceptT ShelleyTxCmdCddlError . newExceptT
@@ -1095,8 +1097,8 @@ runTxSign txOrTxBody witSigningData mnw (TxFile outTxFile) = do
          let shelleyKeyWitnesses = map (makeShelleyKeyWitness txbody) sksShelley
              tx = makeSignedTransaction (byronWitnesses ++ shelleyKeyWitnesses) txbody
 
-         firstExceptT ShelleyTxCmdWriteFileError . newExceptT $
-                      writeTxFileTextEnvelopeCddl outTxFile tx
+         lift (writeTxFileTextEnvelopeCddl outTxFile tx)
+            & onLeft (throwE . ShelleyTxCmdWriteFileError)
 
         UnwitnessedCliFormattedTxBody anyTxbody -> do
           InAnyShelleyBasedEra _era txbody <-
@@ -1441,8 +1443,7 @@ runTxSignWitness (TxBodyFile txbodyFile) witnessFiles (OutputFile oFp) = do
 
         let tx = makeSignedTransaction witnesses txbody
 
-        firstExceptT ShelleyTxCmdWriteFileError . newExceptT $
-          writeTxFileTextEnvelopeCddl oFp tx
+        lift (writeTxFileTextEnvelopeCddl oFp tx) & onLeft (throwE . ShelleyTxCmdWriteFileError)
 
 
 -- | Constrain the era to be Shelley based. Fail for the Byron era.
