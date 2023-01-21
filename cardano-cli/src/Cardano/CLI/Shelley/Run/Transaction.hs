@@ -22,7 +22,7 @@ import           Cardano.Prelude hiding (All, Any)
 import           Prelude (String, error)
 
 import           Control.Monad.Trans.Except.Extra (firstExceptT, hoistEither, hoistMaybe, left,
-                   newExceptT)
+                   newExceptT, onLeft)
 import           Data.Aeson.Encode.Pretty (encodePretty)
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as LBS
@@ -337,8 +337,7 @@ runTxBuildCmd
   -- We cannot use the user specified era to construct a query against a node because it may differ
   -- from the node's era and this will result in the 'QueryEraMismatch' failure.
 
-  SocketPath sockPath <- firstExceptT ShelleyTxCmdSocketEnvError
-                           $ newExceptT readEnvSocketPath
+  SocketPath sockPath <- lift readEnvSocketPath & onLeft (throwE . ShelleyTxCmdSocketEnvError)
 
   let localNodeConnInfo = LocalNodeConnectInfo
                             { localConsensusModeParams = cModeParams
@@ -694,8 +693,7 @@ runTxBuild era (AnyConsensusModeParams cModeParams) networkId mScriptValidity
                      left (ShelleyTxCmdEraConsensusModeMismatchTxBalance outputOptions
                             (AnyConsensusMode CardanoMode) (AnyCardanoEra era))
 
-      SocketPath sockPath <- firstExceptT ShelleyTxCmdSocketEnvError
-                             $ newExceptT readEnvSocketPath
+      SocketPath sockPath <- lift readEnvSocketPath & onLeft (throwE . ShelleyTxCmdSocketEnvError)
 
       let allTxInputs = inputsThatRequireWitnessing ++ allReferenceInputs ++ txinsc
           localNodeConnInfo = LocalNodeConnectInfo
@@ -1127,8 +1125,7 @@ runTxSubmit
   -> FilePath
   -> ExceptT ShelleyTxCmdError IO ()
 runTxSubmit (AnyConsensusModeParams cModeParams) network txFile = do
-    SocketPath sockPath <- firstExceptT ShelleyTxCmdSocketEnvError
-                             $ newExceptT readEnvSocketPath
+    SocketPath sockPath <- lift readEnvSocketPath & onLeft (throwE . ShelleyTxCmdSocketEnvError)
 
     InAnyCardanoEra era tx <- firstExceptT ShelleyTxCmdCddlError . newExceptT
                                 $ readFileTx txFile
