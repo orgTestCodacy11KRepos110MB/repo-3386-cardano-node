@@ -1058,7 +1058,7 @@ runTxSign txOrTxBody witSigningData mnw (TxFile outTxFile) = do
 
   case txOrTxBody of
     (InputTxFile (TxFile inputTxFile)) -> do
-      anyTx <- firstExceptT ShelleyTxCmdCddlError . newExceptT $ readFileTx inputTxFile
+      anyTx <- lift (readFileTx inputTxFile) & onLeft (throwE . ShelleyTxCmdCddlError)
 
       InAnyShelleyBasedEra _era tx <-
           onlyInShelleyBasedEras "sign for Byron era transactions" anyTx
@@ -1127,8 +1127,7 @@ runTxSubmit
 runTxSubmit (AnyConsensusModeParams cModeParams) network txFile = do
     SocketPath sockPath <- lift readEnvSocketPath & onLeft (throwE . ShelleyTxCmdSocketEnvError)
 
-    InAnyCardanoEra era tx <- firstExceptT ShelleyTxCmdCddlError . newExceptT
-                                $ readFileTx txFile
+    InAnyCardanoEra era tx <- lift (readFileTx txFile) & onLeft (throwE . ShelleyTxCmdCddlError)
     let cMode = AnyConsensusMode $ consensusModeOnly cModeParams
     eraInMode <- hoistMaybe
                    (ShelleyTxCmdEraConsensusModeMismatch (Just txFile) cMode (AnyCardanoEra era))
@@ -1317,8 +1316,7 @@ runTxGetTxId txfile = do
               return (InAnyCardanoEra era (getTxBody tx))
 
         InputTxFile (TxFile txFile) -> do
-          InAnyCardanoEra era tx <- firstExceptT ShelleyTxCmdCddlError . newExceptT
-                                      $ readFileTx txFile
+          InAnyCardanoEra era tx <- lift (readFileTx txFile) & onLeft (throwE . ShelleyTxCmdCddlError)
           return . InAnyCardanoEra era $ getTxBody tx
 
     liftIO $ BS.putStrLn $ serialiseToRawBytesHex (getTxId txbody)
@@ -1338,8 +1336,7 @@ runTxView = \case
     -- to get a transaction which allows us to reuse friendlyTxBS!
     liftIO $ BS.putStr $ friendlyTxBodyBS era txbody
   InputTxFile (TxFile txFile) -> do
-    InAnyCardanoEra era tx <- firstExceptT ShelleyTxCmdCddlError . newExceptT
-                                $ readFileTx txFile
+    InAnyCardanoEra era tx <- lift (readFileTx txFile) & onLeft (throwE . ShelleyTxCmdCddlError)
     liftIO $ BS.putStr $ friendlyTxBS era tx
 
 
