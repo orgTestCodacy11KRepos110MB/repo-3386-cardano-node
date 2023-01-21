@@ -345,9 +345,8 @@ runTxBuildCmd
                             , localNodeSocketPath = sockPath
                             }
 
-  AnyCardanoEra nodeEra
-    <- firstExceptT (ShelleyTxCmdQueryConvenienceError . AcqFailure)
-         . newExceptT $ determineEra cModeParams localNodeConnInfo
+  AnyCardanoEra nodeEra <- lift (determineEra cModeParams localNodeConnInfo)
+    & onLeft (throwE . ShelleyTxCmdQueryConvenienceError . AcqFailure)
 
   inputsAndMaybeScriptWits <- firstExceptT ShelleyTxCmdScriptWitnessError $ readScriptWitnessFiles cEra txins
   certFilesAndMaybeScriptWits <- firstExceptT ShelleyTxCmdScriptWitnessError $ readScriptWitnessFiles cEra certs
@@ -703,9 +702,8 @@ runTxBuild era (AnyConsensusModeParams cModeParams) networkId mScriptValidity
                                      , localNodeNetworkId = networkId
                                      , localNodeSocketPath = sockPath
                                      }
-      AnyCardanoEra nodeEra
-        <- firstExceptT (ShelleyTxCmdQueryConvenienceError . AcqFailure)
-             . newExceptT $ determineEra cModeParams localNodeConnInfo
+      AnyCardanoEra nodeEra <- lift (determineEra cModeParams localNodeConnInfo)
+        & onLeft (throwE . ShelleyTxCmdQueryConvenienceError . AcqFailure)
 
       (nodeEraUTxO, pparams, eraHistory, systemStart, stakePools) <-
         firstExceptT ShelleyTxCmdQueryConvenienceError . newExceptT
