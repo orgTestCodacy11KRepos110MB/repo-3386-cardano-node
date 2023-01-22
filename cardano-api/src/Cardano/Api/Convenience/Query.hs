@@ -21,6 +21,7 @@ module Cardano.Api.Convenience.Query (
 import           Prelude
 
 import qualified Control.Monad.Oops as OO
+import           Control.Monad.Trans.Class (lift)
 import           Control.Monad.Trans.Except (ExceptT (..), except, runExceptT)
 import           Control.Monad.Trans.Except.Extra (firstExceptT, hoistMaybe, left)
 import           Data.Bifunctor (first)
@@ -72,19 +73,17 @@ queryStateForBalancedTx
   -> NetworkId
   -> [TxIn]
   -> IO (Either QueryConvenienceError (UTxO era, ProtocolParameters, EraHistory CardanoMode, SystemStart, Set PoolId))
-queryStateForBalancedTx era networkId allTxIns = runExceptT $ do
-  SocketPath sockPath <- ExceptT $ first SockErr <$> readEnvSocketPath
+queryStateForBalancedTx era networkId allTxIns = runExceptT $ OO.runOopsInExceptT @QueryConvenienceError $ do
+  SocketPath sockPath <- lift readEnvSocketPath & OO.onLeft (OO.throw . SockErr)
 
   let cModeParams = CardanoModeParams $ EpochSlots 21600
-      localNodeConnInfo = LocalNodeConnectInfo
-                            cModeParams
-                            networkId
-                            sockPath
 
-  qSbe <- except $ getSbe $ cardanoEraStyle era
+  let localNodeConnInfo = LocalNodeConnectInfo cModeParams networkId sockPath
+
+  qSbe <- getSbe (cardanoEraStyle era) & OO.hoistEither
 
   qeInMode <- toEraInMode era CardanoMode
-    & hoistMaybe (EraConsensusModeMismatch (AnyConsensusMode CardanoMode) (getIsCardanoEraConstraint era $ AnyCardanoEra era))
+    & OO.hoistMaybe (EraConsensusModeMismatch (AnyConsensusMode CardanoMode) (getIsCardanoEraConstraint era $ AnyCardanoEra era))
 
   -- Queries
   let utxoQuery = QueryInEra qeInMode $ QueryInShelleyBasedEra qSbe
@@ -96,15 +95,19 @@ queryStateForBalancedTx era networkId allTxIns = runExceptT $ do
       stakePoolsQuery = QueryInEra qeInMode . QueryInShelleyBasedEra qSbe $ QueryStakePools
 
   -- Query execution
-  utxo <- ExceptT $ executeQueryCardanoMode era networkId utxoQuery
-  pparams <- ExceptT $ executeQueryCardanoMode era networkId pparamsQuery
-  eraHistory <- OO.runOopsInExceptT @QueryConvenienceError $ do
-    queryNodeLocalState_ localNodeConnInfo Nothing eraHistoryQuery
+  utxo <- queryNodeLocalState_ localNodeConnInfo Nothing utxoQuery
+      & OO.onLeft @EraMismatch (OO.throw . QueryEraMismatch)
       & OO.catch @AcquireFailure (OO.throw . AcqFailure . toAcquiringFailure)
-  systemStart <- OO.runOopsInExceptT @QueryConvenienceError $ do
-    queryNodeLocalState_ localNodeConnInfo Nothing systemStartQuery
+  pparams <- queryNodeLocalState_ localNodeConnInfo Nothing pparamsQuery
+      & OO.onLeft @EraMismatch (OO.throw . QueryEraMismatch)
       & OO.catch @AcquireFailure (OO.throw . AcqFailure . toAcquiringFailure)
-  stakePools <- ExceptT $ executeQueryCardanoMode era networkId stakePoolsQuery
+  eraHistory <- queryNodeLocalState_ localNodeConnInfo Nothing eraHistoryQuery
+      & OO.catch @AcquireFailure (OO.throw . AcqFailure . toAcquiringFailure)
+  systemStart <- queryNodeLocalState_ localNodeConnInfo Nothing systemStartQuery
+      & OO.catch @AcquireFailure (OO.throw . AcqFailure . toAcquiringFailure)
+  stakePools <- queryNodeLocalState_ localNodeConnInfo Nothing stakePoolsQuery
+      & OO.onLeft @EraMismatch (OO.throw . QueryEraMismatch)
+      & OO.catch @AcquireFailure (OO.throw . AcqFailure . toAcquiringFailure)
 
   return (utxo, pparams, eraHistory, systemStart, stakePools)
 

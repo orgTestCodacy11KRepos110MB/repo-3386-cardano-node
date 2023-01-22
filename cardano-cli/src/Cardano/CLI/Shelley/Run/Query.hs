@@ -309,8 +309,8 @@ runQueryTip (AnyConsensusModeParams cModeParams) network mOutFile = do
                 }
           )
 
-          & OO.catch @AcquireFailure (\e -> OO.throw (ShelleyQueryCmdAcquireFailure (toAcquiringFailure e)))
-          & OO.catch @UnsupportedNtcVersionError (\e -> OO.throw (ShelleyQueryCmdUnsupportedNtcVersion e))
+          & OO.catch @AcquireFailure (OO.throw . ShelleyQueryCmdAcquireFailure . toAcquiringFailure)
+          & OO.catch @UnsupportedNtcVersionError (OO.throw . ShelleyQueryCmdUnsupportedNtcVersion)
 
       mLocalState <- hushM eLocalState $ \e ->
         liftIO . T.hPutStrLn IO.stderr $ "Warning: Local state unavailable: " <> renderShelleyQueryCmdError e
@@ -441,7 +441,7 @@ runQueryKesPeriodInfo (AnyConsensusModeParams cModeParams) network nodeOpCertFil
 
       eraHistory <- OO.runOopsInExceptT $ do
         queryNodeLocalState_ localNodeConnInfo Nothing eraHistoryQuery
-          & OO.catch @AcquireFailure (\e -> OO.throw $ ShelleyQueryCmdAcquireFailure $ toAcquiringFailure e)
+          & OO.catch @AcquireFailure (OO.throw . ShelleyQueryCmdAcquireFailure . toAcquiringFailure)
 
       let eInfo = toEpochInfo eraHistory
 
@@ -627,7 +627,7 @@ runQueryPoolState (AnyConsensusModeParams cModeParams) network poolIds = do
 
   anyE@(AnyCardanoEra era) <- OO.runOopsInExceptT @ShelleyQueryCmdError $ do
     determineEra_ cModeParams localNodeConnInfo
-      & OO.catch @AcquireFailure (\e -> OO.throw $ ShelleyQueryCmdAcquireFailure $ toAcquiringFailure e)
+      & OO.catch @AcquireFailure (OO.throw . ShelleyQueryCmdAcquireFailure . toAcquiringFailure)
 
   let cMode = consensusModeOnly cModeParams
   sbe <- getSbe $ cardanoEraStyle era
@@ -686,7 +686,7 @@ runQueryStakeSnapshot (AnyConsensusModeParams cModeParams) network allOrOnlyPool
 
   anyE@(AnyCardanoEra era) <- OO.runOopsInExceptT @ShelleyQueryCmdError $ do
     determineEra_ cModeParams localNodeConnInfo
-      & OO.catch @AcquireFailure (\e -> OO.throw $ ShelleyQueryCmdAcquireFailure $ toAcquiringFailure e)
+      & OO.catch @AcquireFailure (OO.throw . ShelleyQueryCmdAcquireFailure . toAcquiringFailure)
 
   let cMode = consensusModeOnly cModeParams
   sbe <- getSbe $ cardanoEraStyle era
@@ -1200,7 +1200,7 @@ runQueryLeadershipSchedule (AnyConsensusModeParams cModeParams) network
 
   anyE@(AnyCardanoEra era) <- OO.runOopsInExceptT @ShelleyQueryCmdError $ do
     determineEra_ cModeParams localNodeConnInfo
-      & OO.catch @AcquireFailure (\e -> OO.throw $ ShelleyQueryCmdAcquireFailure $ toAcquiringFailure e)
+      & OO.catch @AcquireFailure (OO.throw . ShelleyQueryCmdAcquireFailure . toAcquiringFailure)
 
   sbe <- getSbe $ cardanoEraStyle era
   let cMode = consensusModeOnly cModeParams
