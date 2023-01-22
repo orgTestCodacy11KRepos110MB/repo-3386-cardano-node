@@ -37,6 +37,7 @@ import           Cardano.Api.Convenience.Constraints
 import           Cardano.Api.Environment
 import           Cardano.Api.Eras
 import           Cardano.Api.IPC
+import           Cardano.Api.IPC.Monad (executeLocalStateQueryExpr_, queryExpr_)
 import           Cardano.Api.Modes
 import           Cardano.Api.NetworkId
 import           Cardano.Api.ProtocolParameters
@@ -50,6 +51,7 @@ data QueryConvenienceError
   | QueryEraMismatch EraMismatch
   | ByronEraNotSupported
   | EraConsensusModeMismatch !AnyConsensusMode !AnyCardanoEra
+  | QueryConvenienceUnsupportedNodeToClientVersion !UnsupportedNtcVersionError
 
 renderQueryConvenienceError :: QueryConvenienceError -> Text
 renderQueryConvenienceError (AcqFailure e) =
@@ -65,6 +67,9 @@ renderQueryConvenienceError ByronEraNotSupported =
 renderQueryConvenienceError (EraConsensusModeMismatch cMode anyCEra) =
   "Consensus mode and era mismatch. Consensus mode: " <> textShow cMode <>
   " Era: " <> textShow anyCEra
+renderQueryConvenienceError (QueryConvenienceUnsupportedNodeToClientVersion
+  (UnsupportedNtcVersionError minNodeToClientVersion nodeToClientVersion)) =
+  "Unsupported Node to Client version: " <> textShow minNodeToClientVersion <> " " <> textShow nodeToClientVersion
 
 -- | A convenience function to query the relevant information, from
 -- the local node, for Cardano.Api.Convenience.Construction.constructBalancedTx
@@ -95,19 +100,29 @@ queryStateForBalancedTx era networkId allTxIns = runExceptT $ OO.runOopsInExcept
       stakePoolsQuery = QueryInEra qeInMode . QueryInShelleyBasedEra qSbe $ QueryStakePools
 
   -- Query execution
-  utxo <- queryNodeLocalState_ localNodeConnInfo Nothing utxoQuery
-      & OO.onLeft @EraMismatch (OO.throw . QueryEraMismatch)
+  utxo <- executeLocalStateQueryExpr_ localNodeConnInfo Nothing
+    ( queryExpr_ utxoQuery
+    ) & OO.onLeft @EraMismatch (OO.throw . QueryEraMismatch)
       & OO.catch @AcquireFailure (OO.throw . AcqFailure . toAcquiringFailure)
-  pparams <- queryNodeLocalState_ localNodeConnInfo Nothing pparamsQuery
-      & OO.onLeft @EraMismatch (OO.throw . QueryEraMismatch)
+      & OO.catch @UnsupportedNtcVersionError (OO.throw . QueryConvenienceUnsupportedNodeToClientVersion)
+  pparams <- executeLocalStateQueryExpr_ localNodeConnInfo Nothing
+    ( queryExpr_ pparamsQuery
+    ) & OO.onLeft @EraMismatch (OO.throw . QueryEraMismatch)
       & OO.catch @AcquireFailure (OO.throw . AcqFailure . toAcquiringFailure)
-  eraHistory <- queryNodeLocalState_ localNodeConnInfo Nothing eraHistoryQuery
+      & OO.catch @UnsupportedNtcVersionError (OO.throw . QueryConvenienceUnsupportedNodeToClientVersion)
+  eraHistory <- executeLocalStateQueryExpr_ localNodeConnInfo Nothing
+    ( queryExpr_ eraHistoryQuery
+    ) & OO.catch @AcquireFailure (OO.throw . AcqFailure . toAcquiringFailure)
+      & OO.catch @UnsupportedNtcVersionError (OO.throw . QueryConvenienceUnsupportedNodeToClientVersion)
+  systemStart <- executeLocalStateQueryExpr_ localNodeConnInfo Nothing
+    ( queryExpr_ systemStartQuery
+    ) & OO.catch @AcquireFailure (OO.throw . AcqFailure . toAcquiringFailure)
+      & OO.catch @UnsupportedNtcVersionError (OO.throw . QueryConvenienceUnsupportedNodeToClientVersion)
+  stakePools <- executeLocalStateQueryExpr_ localNodeConnInfo Nothing
+    ( queryExpr_ stakePoolsQuery
+    ) & OO.onLeft @EraMismatch (OO.throw . QueryEraMismatch)
       & OO.catch @AcquireFailure (OO.throw . AcqFailure . toAcquiringFailure)
-  systemStart <- queryNodeLocalState_ localNodeConnInfo Nothing systemStartQuery
-      & OO.catch @AcquireFailure (OO.throw . AcqFailure . toAcquiringFailure)
-  stakePools <- queryNodeLocalState_ localNodeConnInfo Nothing stakePoolsQuery
-      & OO.onLeft @EraMismatch (OO.throw . QueryEraMismatch)
-      & OO.catch @AcquireFailure (OO.throw . AcqFailure . toAcquiringFailure)
+      & OO.catch @UnsupportedNtcVersionError (OO.throw . QueryConvenienceUnsupportedNodeToClientVersion)
 
   return (utxo, pparams, eraHistory, systemStart, stakePools)
 
