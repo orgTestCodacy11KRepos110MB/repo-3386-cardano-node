@@ -100,31 +100,16 @@ queryStateForBalancedTx era networkId allTxIns = runExceptT $ OO.runOopsInExcept
       stakePoolsQuery = QueryInEra qeInMode . QueryInShelleyBasedEra qSbe $ QueryStakePools
 
   -- Query execution
-  utxo <- executeLocalStateQueryExpr_ localNodeConnInfo Nothing
-    ( queryExpr_ utxoQuery
-    ) & OO.onLeft @EraMismatch (OO.throw . QueryEraMismatch)
-      & OO.catch @AcquireFailure (OO.throw . AcqFailure . toAcquiringFailure)
-      & OO.catch @UnsupportedNtcVersionError (OO.throw . QueryConvenienceUnsupportedNodeToClientVersion)
-  pparams <- executeLocalStateQueryExpr_ localNodeConnInfo Nothing
-    ( queryExpr_ pparamsQuery
-    ) & OO.onLeft @EraMismatch (OO.throw . QueryEraMismatch)
-      & OO.catch @AcquireFailure (OO.throw . AcqFailure . toAcquiringFailure)
-      & OO.catch @UnsupportedNtcVersionError (OO.throw . QueryConvenienceUnsupportedNodeToClientVersion)
-  eraHistory <- executeLocalStateQueryExpr_ localNodeConnInfo Nothing
-    ( queryExpr_ eraHistoryQuery
-    ) & OO.catch @AcquireFailure (OO.throw . AcqFailure . toAcquiringFailure)
-      & OO.catch @UnsupportedNtcVersionError (OO.throw . QueryConvenienceUnsupportedNodeToClientVersion)
-  systemStart <- executeLocalStateQueryExpr_ localNodeConnInfo Nothing
-    ( queryExpr_ systemStartQuery
-    ) & OO.catch @AcquireFailure (OO.throw . AcqFailure . toAcquiringFailure)
-      & OO.catch @UnsupportedNtcVersionError (OO.throw . QueryConvenienceUnsupportedNodeToClientVersion)
-  stakePools <- executeLocalStateQueryExpr_ localNodeConnInfo Nothing
-    ( queryExpr_ stakePoolsQuery
-    ) & OO.onLeft @EraMismatch (OO.throw . QueryEraMismatch)
-      & OO.catch @AcquireFailure (OO.throw . AcqFailure . toAcquiringFailure)
-      & OO.catch @UnsupportedNtcVersionError (OO.throw . QueryConvenienceUnsupportedNodeToClientVersion)
+  executeLocalStateQueryExpr_ localNodeConnInfo Nothing
+    ( do  utxo <- queryExpr_ utxoQuery & OO.onLeft @EraMismatch (OO.throw . QueryEraMismatch)
+          pparams <- queryExpr_ pparamsQuery & OO.onLeft @EraMismatch (OO.throw . QueryEraMismatch)
+          eraHistory <- queryExpr_ eraHistoryQuery
+          systemStart <- queryExpr_ systemStartQuery
+          stakePools <- queryExpr_ stakePoolsQuery & OO.onLeft @EraMismatch (OO.throw . QueryEraMismatch)
 
-  return (utxo, pparams, eraHistory, systemStart, stakePools)
+          pure (utxo, pparams, eraHistory, systemStart, stakePools)
+    ) & OO.catch @AcquireFailure (OO.throw . AcqFailure . toAcquiringFailure)
+      & OO.catch @UnsupportedNtcVersionError (OO.throw . QueryConvenienceUnsupportedNodeToClientVersion)
 
 -- | Query the node to determine which era it is in.
 determineEra
