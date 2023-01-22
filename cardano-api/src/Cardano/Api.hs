@@ -736,6 +736,7 @@ module Cardano.Api (
     QueryConvenienceError(..),
     queryStateForBalancedTx,
     renderQueryConvenienceError,
+    handleQueryConvenienceErrors,
 
     -- ** Constraint satisfaction functions
     getIsCardanoEraConstraint,

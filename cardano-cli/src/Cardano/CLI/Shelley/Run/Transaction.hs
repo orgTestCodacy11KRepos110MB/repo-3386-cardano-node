@@ -8,6 +8,7 @@
 {-# LANGUAGE TupleSections #-}
 
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Cardano.CLI.Shelley.Run.Transaction
   ( ShelleyTxCmdError(..)
@@ -47,6 +48,7 @@ import           Cardano.CLI.Shelley.Run.Read
 import           Cardano.CLI.Shelley.Run.Validate
 import           Cardano.CLI.Types
 
+import qualified Control.Monad.Oops as OO
 import           Ouroboros.Consensus.Cardano.Block (EraMismatch (..))
 import qualified Ouroboros.Network.Protocol.LocalTxSubmission.Client as Net.Tx
 
@@ -419,9 +421,11 @@ runTxBuildCmd
              let consensusMode = consensusModeOnly cModeParams
              case consensusMode of
                CardanoMode -> do
-                 (nodeEraUTxO, _, eraHistory, systemStart, _)
-                   <- firstExceptT ShelleyTxCmdQueryConvenienceError
-                         . newExceptT $ queryStateForBalancedTx nodeEra nid allTxInputs
+                 (nodeEraUTxO, _, eraHistory, systemStart, _) <-
+                    queryStateForBalancedTx nodeEra nid allTxInputs
+                      & handleQueryConvenienceErrors
+                      & OO.runOopsInExceptT @QueryConvenienceError
+                      & firstExceptT ShelleyTxCmdQueryConvenienceError
                  case toEraInMode cEra CardanoMode of
                    Just eInMode -> do
                      -- Why do we cast the era? The user can specify an era prior to the era that the node is currently in.
@@ -713,8 +717,10 @@ runTxBuild era (AnyConsensusModeParams cModeParams) networkId mScriptValidity
              . newExceptT $ determineEra cModeParams localNodeConnInfo
 
       (nodeEraUTxO, pparams, eraHistory, systemStart, stakePools) <-
-        firstExceptT ShelleyTxCmdQueryConvenienceError . newExceptT
-          $ queryStateForBalancedTx nodeEra networkId allTxInputs
+        queryStateForBalancedTx nodeEra networkId allTxInputs
+          & handleQueryConvenienceErrors
+          & OO.runOopsInExceptT @QueryConvenienceError
+          & firstExceptT ShelleyTxCmdQueryConvenienceError
 
       validatedPParams <- hoistEither $ first ShelleyTxCmdProtocolParametersValidationError
                                       $ validateProtocolParameters era (Just pparams)

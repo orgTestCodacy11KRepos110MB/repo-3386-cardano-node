@@ -16,6 +16,8 @@ module Cardano.Api.Convenience.Query (
 
     queryStateForBalancedTx,
     renderQueryConvenienceError,
+
+    handleQueryConvenienceErrors,
   ) where
 
 import           Prelude
@@ -72,6 +74,16 @@ renderQueryConvenienceError (QueryConvenienceUnsupportedNodeToClientVersion
   (UnsupportedNtcVersionError minNodeToClientVersion nodeToClientVersion)) =
   "Unsupported Node to Client version: " <> textShow minNodeToClientVersion <> " " <> textShow nodeToClientVersion
 
+handleQueryConvenienceErrors :: ()
+  => Monad m
+  => OO.CouldBeF e QueryConvenienceError
+  => ExceptT (OO.Variant (EraMismatch : AcquireFailure : UnsupportedNtcVersionError : e)) m a
+  -> ExceptT (OO.Variant e) m a
+handleQueryConvenienceErrors f = f
+  & OO.catch @EraMismatch (\e -> OO.throw (QueryEraMismatch e))
+  & OO.catch @AcquireFailure (OO.throw . AcqFailure . toAcquiringFailure)
+  & OO.catch @UnsupportedNtcVersionError (OO.throw . QueryConvenienceUnsupportedNodeToClientVersion)
+
 queryUtxo :: ()
   => OO.CouldBeF e UnsupportedNtcVersionError
   => OO.CouldBeF e EraMismatch
@@ -122,12 +134,16 @@ querySystemStart = queryExpr_ QuerySystemStart
 
 -- | A convenience function to query the relevant information, from
 -- the local node, for Cardano.Api.Convenience.Construction.constructBalancedTx
-queryStateForBalancedTx
-  :: CardanoEra era
+queryStateForBalancedTx :: ()
+  => OO.CouldBeF es QueryConvenienceError
+  => OO.CouldBeF es AcquireFailure
+  => OO.CouldBeF es UnsupportedNtcVersionError
+  => OO.CouldBeF es EraMismatch
+  => CardanoEra era
   -> NetworkId
   -> [TxIn]
-  -> IO (Either QueryConvenienceError (UTxO era, ProtocolParameters, EraHistory CardanoMode, SystemStart, Set PoolId))
-queryStateForBalancedTx era networkId allTxIns = runExceptT $ OO.runOopsInExceptT @QueryConvenienceError $ do
+  -> ExceptT (OO.Variant es) IO (UTxO era, ProtocolParameters, EraHistory CardanoMode, SystemStart, Set PoolId)
+queryStateForBalancedTx era networkId allTxIns = do
   SocketPath sockPath <- lift readEnvSocketPath & OO.onLeft (OO.throw . SockErr)
 
   let cModeParams = CardanoModeParams $ EpochSlots 21600
@@ -140,17 +156,14 @@ queryStateForBalancedTx era networkId allTxIns = runExceptT $ OO.runOopsInExcept
     & OO.hoistMaybe (EraConsensusModeMismatch (AnyConsensusMode CardanoMode) (getIsCardanoEraConstraint era $ AnyCardanoEra era))
 
   -- Query execution
-  executeLocalStateQueryExpr_ localNodeConnInfo Nothing
-    ( do  utxo <- queryUtxo qeInMode qSbe allTxIns
-          pparams <- queryProtocolParams qeInMode qSbe
-          eraHistory <- queryEraHistory
-          systemStart <- querySystemStart
-          stakePools <- queryStakePools qeInMode qSbe
+  executeLocalStateQueryExpr_ localNodeConnInfo Nothing $ do
+    utxo <- queryUtxo qeInMode qSbe allTxIns
+    pparams <- queryProtocolParams qeInMode qSbe
+    eraHistory <- queryEraHistory
+    systemStart <- querySystemStart
+    stakePools <- queryStakePools qeInMode qSbe
 
-          pure (utxo, pparams, eraHistory, systemStart, stakePools)
-    ) & OO.catch @EraMismatch (OO.throw . QueryEraMismatch)
-      & OO.catch @AcquireFailure (OO.throw . AcqFailure . toAcquiringFailure)
-      & OO.catch @UnsupportedNtcVersionError (OO.throw . QueryConvenienceUnsupportedNodeToClientVersion)
+    pure (utxo, pparams, eraHistory, systemStart, stakePools)
 
 -- | Query the node to determine which era it is in.
 determineEra
