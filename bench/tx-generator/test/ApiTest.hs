@@ -171,7 +171,7 @@ checkPlutusLoop (Just PlutusOn{..})
           , autoBudgetDatum = ScriptDataNumber 0
           , autoBudgetRedeemer = scriptDataModifyNumber (const 1_000_000) redeemer
           }
-    putStrLn $ "--> " ++ show (plutusAutoBudgetMaxOut protocolParameters script autoBudget)
+    putStrLn $ "--> " ++ show (plutusAutoBudgetMaxOut protocolParameters script autoBudget 1)
 
   where
     getRedeemerFile =
