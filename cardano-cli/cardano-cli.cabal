@@ -130,6 +130,7 @@ library
                       , formatting
                       , iproute
                       , network
+                      , oops >= 0.2
                       , optparse-applicative-fork
                       , ouroboros-consensus
                       , ouroboros-consensus-byron
