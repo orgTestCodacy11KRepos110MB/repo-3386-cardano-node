@@ -40,7 +40,7 @@ import           Testnet.Util.Process
 import           Testnet.Util.Runtime
 
 hprop_kes_period_info :: Property
-hprop_kes_period_info = integration . H.runFinallies . H.workspace "chairman" $ \tempAbsBasePath' -> do
+hprop_kes_period_info = integration . H.runFinallies . H.workspace "kes_period_info" $ \tempAbsBasePath' -> do
   H.note_ SYS.os
   base <- H.note =<< H.evalIO . IO.canonicalizePath =<< H.getProjectBase
   configurationTemplate

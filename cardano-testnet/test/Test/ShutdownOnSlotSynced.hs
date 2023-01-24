@@ -26,7 +26,7 @@ import           Cardano.Testnet
 import           Testnet.Util.Runtime (TestnetRuntime(..))
 
 hprop_shutdownOnSlotSynced :: Property
-hprop_shutdownOnSlotSynced = integration . H.runFinallies . H.workspace "chairman" $ \tempAbsBasePath' -> do
+hprop_shutdownOnSlotSynced = integration . H.runFinallies . H.workspace "shutdownOnSlotSynced" $ \tempAbsBasePath' -> do
   -- Start a local test net
   baseDir <- H.note =<< H.noteIO . IO.canonicalizePath =<< H.getProjectBase
   configTemplate <- H.noteShow $ baseDir </> "configuration/defaults/byron-mainnet/configuration.yaml"

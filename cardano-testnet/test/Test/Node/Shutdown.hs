@@ -34,7 +34,7 @@ import           Testnet.Util.Process (procNode)
 {- HLINT ignore "Redundant <&>" -}
 
 hprop_shutdown :: Property
-hprop_shutdown = integration . H.runFinallies . H.workspace "chairman" $ \tempAbsBasePath' -> do
+hprop_shutdown = integration . H.runFinallies . H.workspace "shutdown" $ \tempAbsBasePath' -> do
   base <- H.note =<< H.noteIO . IO.canonicalizePath =<< H.getProjectBase
   configurationTemplate <- H.noteShow $ base </> "configuration/defaults/byron-mainnet/configuration.yaml"
   Conf { tempBaseAbsPath, tempAbsPath, logDir, socketDir } <- H.noteShowM $

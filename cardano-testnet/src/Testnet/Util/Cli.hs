@@ -7,6 +7,7 @@ module Testnet.Util.Cli
   , Comment (..)
   , KeyNames (..)
 
+  , fakeItH
   , fakeIt
   , File (..)
   , Address
@@ -19,16 +20,18 @@ module Testnet.Util.Cli
   , SKey
 
   , OperatorCounter
-
+  , ByronKey
+  , ByronAddress
+  
+  , ByronDelegationKey
+  , ByronDelegationCert
+  
   , getVKeyPath
   , getSKeyPath
 
   , makeFilePath
-
-  , ByronKey
   , cliKeyGen
 
-  , ByronAddress
   , cliSigningKeyAddress
   ) where
 
@@ -122,13 +125,27 @@ data VKey
 data SKey
 
 data OperatorCounter
+--data ByronGenesisKey
+--data ByronGenesisAddress
 data ByronKey
+data ByronAddress
+data ByronDelegationKey
+data ByronDelegationCert
 
 newtype File a = File {unFile :: FilePath}
   deriving (Show, Eq)
 
--- When all uses of fakeIt are removed the cleanup is done
-
+-- When all uses of fakeItH are removed the cleanup is done
+fakeItH :: FilePath -> H.Integration (File a)
+fakeItH filePath = do
+  return $ File filePath
+  {-
+  exists <- liftIO $ fileExists filePath
+  if exists
+    then return $ File filePath
+    else error (filePath <> " does not exist.")
+-}
+  
 fakeIt :: FilePath -> File a
 fakeIt = File
 
@@ -147,8 +164,6 @@ cliKeyGen tmp key = do
       , "--secret", keyPath
       ]
   return $ File keyPath
-
-data ByronAddress
 
 cliSigningKeyAddress
   :: FilePath

@@ -1,9 +1,11 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# OPTIONS_GHC -Wno-unused-do-bind #-}
 {-# OPTIONS_GHC -Wno-unused-matches #-}
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 module Testnet.Cardano
   ( ForkPoint(..)
@@ -164,13 +166,18 @@ cardanoTestnet testnetOptions configuration@H.Conf {tempAbsPath, testnetMagic} =
   void $ H.note OS.os
   currentTime <- H.noteShowIO DTC.getCurrentTime
   startTime <- H.noteShow $ DTC.addUTCTime startTimeOffsetSeconds currentTime
-  
-  cardanoTestnetByronGenesis testnetOptions configuration startTime
-  cardanoTestnetByronGenesisExpenditure testnetOptions configuration
+
+
+  ( byronGenesisKeys
+    , byronDelegationCerts
+    , byronDelegationKeys) <- cardanoTestnetByronGenesis testnetOptions configuration startTime
+{-
+  cardanoTestnetByronGenesisExpenditure testnetOptions configuration byronGenesisKeys
   cardanoTestnetByronGovernance
     (L.length $ cardanoBftNodeOptions testnetOptions)
     testnetMagic
     tempAbsPath
+-}
   cardanoTestnetShelleyGenesis testnetOptions configuration startTime
   poolKeys <- cardanoTestnetPart5 testnetOptions configuration
 
@@ -179,12 +186,15 @@ cardanoTestnet testnetOptions configuration@H.Conf {tempAbsPath, testnetMagic} =
   testnetRuntime <- cardanoTestnetLaunchCluster testnetOptions configuration poolKeys wallets
   return testnetRuntime
 
-
 cardanoTestnetByronGenesis
   :: CardanoTestnetOptions
   -> H.Conf
   -> DTC.UTCTime
-  -> H.Integration ()
+  -> H.Integration
+    ( [File ByronKey]
+    , [File ByronDelegationCert]
+    , [File ByronDelegationKey]
+    )
 cardanoTestnetByronGenesis testnetOptions H.Conf {..} startTime = do
 
   let numBftNodes = L.length (cardanoBftNodeOptions testnetOptions)
@@ -322,22 +332,36 @@ cardanoTestnetByronGenesis testnetOptions H.Conf {..} startTime = do
   forM_ bftNodesN $ \n -> do
     H.createFileLink (tempAbsPath </> "byron/delegate-keys.00" <> show @Int (n - 1) <> ".key") (tempAbsPath </> "node-bft" <> show @Int n </> "byron/delegate.key")
     H.createFileLink (tempAbsPath </> "byron/delegation-cert.00" <> show @Int (n - 1) <> ".json") (tempAbsPath </> "node-bft" <> show @Int n </> "byron/delegate.cert")
+  let
+    forallBftNodesMkFile x = forM [1..numBftNodes] (fakeItH . x)
 
-cardanoTestnetByronGenesisExpenditure :: CardanoTestnetOptions -> H.Conf -> H.Integration ()
-cardanoTestnetByronGenesisExpenditure testnetOptions H.Conf {..} = do
+  (genesisKeys :: [File ByronKey])<- forallBftNodesMkFile $ \n -> "byron/genesis-keys.00" <> show @Int (n - 1) <> ".json"
+  (delegationCerts :: [File ByronDelegationCert]) <- forallBftNodesMkFile $ \n -> "byron/delegate-keys.00" <> show @Int (n - 1) <> ".key"
+  (delegationKeys :: [File ByronDelegationKey]) <- forallBftNodesMkFile $ \n -> "byron/delegation-cert.00" <> show @Int (n - 1) <> ".json"
 
+  return (genesisKeys, delegationCerts, delegationKeys)
+  
+
+{-
+cardanoTestnetByronGenesisExpenditure creates an transaction `tx0.tx'
+which however is never used anywhere ??
+-}
+cardanoTestnetByronGenesisExpenditure
+  :: CardanoTestnetOptions
+  -> H.Conf
+  -> [File ByronKey]
+  -> H.Integration ()
+cardanoTestnetByronGenesisExpenditure testnetOptions H.Conf {..} genesisKeys = do
   let numBftNodes = L.length (cardanoBftNodeOptions testnetOptions)
-
--- End Of Part1 Start Of Part2
 
   -- Create keys and addresses to withdraw the initial UTxO into
   byronAddress0:_ <- forM [1 .. numBftNodes] $ \n -> do
     skey <- cliKeyGen tempAbsPath $ "byron/payment-keys.00" <> show @Int (n - 1) <> ".key"
     cliSigningKeyAddress tempAbsPath testnetMagic skey $ "byron/address-00" <> show @Int (n - 1)
 
-  byronGensisAddress0:_ <- forM [1 .. numBftNodes] $ \n -> do
+  byronGensisAddress0:_ <- forM (zip [1 .. numBftNodes] genesisKeys) $ \(n,key) -> do
     cliSigningKeyAddress tempAbsPath testnetMagic
-      (fakeIt $ "byron/genesis-keys.00" <> show @Int (n - 1) <> ".key")
+      key
       ("byron/genesis-address-00" <> show @Int (n - 1))
   
   richAddrFrom <- S.firstLine <$> H.readFile (tempAbsPath </> "byron/genesis-address-000")
@@ -353,12 +377,16 @@ cardanoTestnetByronGenesisExpenditure testnetOptions H.Conf {..} = do
     [ "issue-genesis-utxo-expenditure"
     , "--genesis-json", tempAbsPath </> "byron/genesis.json"
     , "--testnet-magic", show @Int testnetMagic
-    , "--tx", tempAbsPath </> "tx0.tx"
+    , "--tx", tempAbsPath </> "tx0.tx"                             -- never transmitted or referenced ?
     , "--wallet-key", tempAbsPath </> "byron/delegate-keys.000.key"
     , "--rich-addr-from", richAddrFrom
     , "--txout", show @(String, Int) (txAddr, fundsPerByronAddress) -- should read FundsPerByronAddress from genesis!
     ]
 
+{-
+cardanoTestnetByronGovernance creates two update-proposals and two update-votes.
+However they are never transmitted to the chain ?!
+-}
 cardanoTestnetByronGovernance
   :: Int
   -> Int
