@@ -168,10 +168,7 @@ renderShelleyQueryCmdError err =
       "Failed to decode PoolState.  Error: " <> Text.pack (show decoderError)
     ShelleyQueryCmdStakeSnapshotDecodeError decoderError ->
       "Failed to decode StakeSnapshot.  Error: " <> Text.pack (show decoderError)
-    ShelleyQueryCmdUnsupportedNtcVersion (UnsupportedNtcVersionError minNtcVersion ntcVersion) ->
-      "Unsupported feature for the node-to-client protocol version.\n" <>
-      "This query requires at least " <> show minNtcVersion <> " but the node negotiated " <> show ntcVersion <> ".\n" <>
-      "Later node versions support later protocol versions (but development protocol versions are not enabled in the node by default)."
+    ShelleyQueryCmdUnsupportedNtcVersion e -> renderUnsupportedNtcVersionError e
 
 runQueryCmd :: QueryCmd -> ExceptT ShelleyQueryCmdError IO ()
 runQueryCmd cmd =
