@@ -9,9 +9,10 @@ module Testnet.Util.Cli
 
   , fakeItH
   , fakeIt
+  , TmpDir
   , File (..)
   , Address
-  , Operator
+  , Operator -- == Cold Keys
   , Kes
   , StakeAddress
   , Vrf
@@ -71,23 +72,23 @@ data KeyNames = KeyNames
 type KeyGen a = H.Integration (File (a VKey), File (a SKey))
 
 -- cliAddressKeyGen :: FilePath -> Comment -> KeyGen
-cliAddressKeyGen :: FilePath -> KeyNames -> KeyGen Address
+cliAddressKeyGen :: TmpDir -> KeyNames -> KeyGen Address
 cliAddressKeyGen = shelleyKeyGen "address" "key-gen"
 
-cliStakeAddressKeyGen :: FilePath -> KeyNames -> KeyGen StakeAddress
+cliStakeAddressKeyGen :: TmpDir -> KeyNames -> KeyGen StakeAddress
 cliStakeAddressKeyGen = shelleyKeyGen "stake-address" "key-gen"
 
-cliNodeKeyGenVrf :: FilePath -> KeyNames -> KeyGen Vrf
+cliNodeKeyGenVrf :: TmpDir -> KeyNames -> KeyGen Vrf
 cliNodeKeyGenVrf = shelleyKeyGen "node" "key-gen-VRF"
 
-cliNodeKeyGenKes :: FilePath -> KeyNames -> KeyGen Kes
+cliNodeKeyGenKes :: TmpDir -> KeyNames -> KeyGen Kes
 cliNodeKeyGenKes = shelleyKeyGen "node" "key-gen-KES"
 
-shelleyKeyGen :: String -> String -> FilePath -> KeyNames -> KeyGen x
-shelleyKeyGen major minor basePath keyNames = do
+shelleyKeyGen :: String -> String -> TmpDir -> KeyNames -> KeyGen x
+shelleyKeyGen major minor tmpDir keyNames = do
   let
-    vKeyPath = basePath </> verificationKeyFile keyNames
-    sKeyPath = basePath </> signingKeyFile keyNames
+    vKeyPath = tmpDir </> verificationKeyFile keyNames
+    sKeyPath = tmpDir </> signingKeyFile keyNames
   execCli_
       [ major, minor
       , "--verification-key-file", vKeyPath
@@ -96,17 +97,17 @@ shelleyKeyGen major minor basePath keyNames = do
   return (File vKeyPath, File sKeyPath)
 
 cliNodeKeyGen
-  :: FilePath
+  :: TmpDir
   -> FilePath
   -> FilePath
   -> FilePath
   -> H.Integration (File (Operator VKey), File (Operator SKey), File OperatorCounter)
 
-cliNodeKeyGen base vkey skey counter = do
+cliNodeKeyGen tmpDir vkey skey counter = do
   let
-    vkPath = base </> vkey
-    skPath = base </> skey
-    counterPath = base </> counter
+    vkPath = tmpDir </> vkey
+    skPath = tmpDir </> skey
+    counterPath = tmpDir </> counter
   execCli_
     [ "node", "key-gen"
     , "--cold-verification-key-file", vkPath
@@ -115,11 +116,11 @@ cliNodeKeyGen base vkey skey counter = do
     ]
   return (File vkPath, File skPath, File counterPath)
 
-data Address t
-data Kes t
-data Operator t
-data StakeAddress t
-data Vrf t
+data Address key
+data Kes key
+data Operator key
+data StakeAddress key
+data Vrf key
 
 data VKey
 data SKey
@@ -132,6 +133,7 @@ data ByronAddress
 data ByronDelegationKey
 data ByronDelegationCert
 
+type TmpDir = FilePath
 newtype File a = File {unFile :: FilePath}
   deriving (Show, Eq)
 
@@ -156,7 +158,7 @@ getSKeyPath ::  (File (a VKey), File (a SKey)) -> FilePath
 getSKeyPath (_, File a) = a
 
 --byron
-cliKeyGen :: FilePath -> FilePath -> H.Integration (File ByronKey)
+cliKeyGen :: TmpDir -> FilePath -> H.Integration (File ByronKey)
 cliKeyGen tmp key = do
   let keyPath = tmp </> key
   execCli_
@@ -166,7 +168,7 @@ cliKeyGen tmp key = do
   return $ File keyPath
 
 cliSigningKeyAddress
-  :: FilePath
+  :: TmpDir
   -> Int
   -> File ByronKey
   -> FilePath

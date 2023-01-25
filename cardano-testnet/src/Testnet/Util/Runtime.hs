@@ -69,18 +69,16 @@ data NodeRuntime = NodeRuntime
 
 data PoolNode = PoolNode
   { poolRuntime :: NodeRuntime
-  , poolKeys :: PoolNodeKeys
+  , poolKeys :: PoolNodeKeys -- used in Alonzo LeadershipShedule
   }
 
 data PoolNodeKeys = PoolNodeKeys
-  { poolNodeKeysColdVkey :: FilePath
+  { poolNodeKeysColdVkey :: FilePath -- == Operator keys -- used in LeadershipShedule
   , poolNodeKeysColdSkey :: FilePath
   , poolNodeKeysVrf :: (File (Vrf VKey), File (Vrf SKey))
   , poolNodeKeysVrfVkey :: FilePath
   , poolNodeKeysVrfSkey :: FilePath
   , poolNodeKeysOperator :: (File (Operator VKey), File (Operator SKey), File OperatorCounter)
-  , poolNodeKeysStakingVkey :: FilePath
-  , poolNodeKeysStakingSkey :: FilePath
   } deriving (Eq, Show)
 
 data PaymentKeyPair = PaymentKeyPair
