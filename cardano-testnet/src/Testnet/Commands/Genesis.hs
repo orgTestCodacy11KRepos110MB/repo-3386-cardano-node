@@ -14,6 +14,7 @@ import           Control.Monad.Catch
 import           Control.Monad.IO.Class
 import           Data.Aeson
 import           Data.Time.Clock (UTCTime)
+import           GHC.Stack (HasCallStack, withFrozenCallStack)
 
 import           Hedgehog.Extras.Stock.Time (showUTCTimeSeconds)
 import           Hedgehog.Internal.Property
@@ -24,7 +25,7 @@ import           Testnet.Util.Process
 -- | Creates a default Byron genesis. This is required for any testnet, predominantly because
 -- we inject our ADA supply into our testnet via the Byron genesis.
 createByronGenesis
-  :: (MonadTest m, MonadCatch m, MonadIO m)
+  :: (MonadTest m, MonadCatch m, MonadIO m, HasCallStack)
   => Int
   -> UTCTime
   -> BabbageTestnetOptions
@@ -32,7 +33,7 @@ createByronGenesis
   -> String
   -> m ()
 createByronGenesis testnetMagic startTime testnetOptions pParamFp genOutputDir =
-    execCli_
+  withFrozenCallStack $ execCli_
     [ "byron", "genesis", "genesis"
     , "--protocol-magic", show testnetMagic
     , "--start-time", showUTCTimeSeconds startTime
@@ -52,10 +53,10 @@ createByronGenesis testnetMagic startTime testnetOptions pParamFp genOutputDir =
 -- command creates a transaction input that defaults to the 0th index and therefore
 -- we can spend spend this tx input in a transaction.
 createShelleyGenesisInitialTxIn
-  :: (MonadTest m, MonadCatch m, MonadIO m)
+  :: (MonadTest m, MonadCatch m, MonadIO m, HasCallStack)
   => Int -> FilePath -> m String
 createShelleyGenesisInitialTxIn testnetMagic vKeyFp =
-  execCli
+  withFrozenCallStack $ execCli
       [ "genesis", "initial-txin"
       , "--testnet-magic", show @Int testnetMagic
       , "--verification-key-file", vKeyFp
