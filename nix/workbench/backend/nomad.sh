@@ -13,6 +13,8 @@ usage_nomad() {
     nomad-driver-podman-start RUN-DIR
     nomad-server-start        RUN-DIR
     nomad-server-stop         RUN-DIR
+    nomad-server-pid-file
+    nomad-server-pid
 EOF
 }
 
@@ -23,12 +25,14 @@ backend_nomad() {
   # Stateful Nomad server and agent:
   # Calling `wb backend XXX` inside a Nix derivation will make everything fail:
   # "mkdir: cannot create directory '/homeless-shelter': Permission denied"
+  local nomad_server_dir="$(envjqr 'cacheDir')"/nomad/server
+  mkdir -p "${nomad_server_dir}"
+  # TODO: Which directory ? State, cache, config ?
+  # local nomad_state_dir=${XDG_STATE_HOME:-$HOME/.local/state}/cardano-workbench/nomad
   # $XDG_STATE_HOME defines the base directory relative to which user-specific
   # state files should be stored.
   # (analogous to /var/lib).
   # https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
-  local nomad_state_dir=${XDG_STATE_HOME:-$HOME/.local/state}/cardano-workbench/nomad
-  mkdir -p "$nomad_state_dir"/{server,agent}
 
   case "$op" in
 
@@ -44,10 +48,6 @@ backend_nomad() {
     setenv-defaults )
       local usage="USAGE: wb backend $op PROFILE-DIR"
       local profile_dir=${1:?$usage}
-
-      # TODO: stateful nomad ?
-      # https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
-      # ${XDG_STATE_HOME:-$HOME/.local/state}
 
       # The output files of the profiles Nix derivation:
       ## The one provided by the profile, the one used may suffer changes (jq).
@@ -550,36 +550,44 @@ backend_nomad() {
       local usage="USAGE: wb backend pass $op RUN-DIR"
       local dir=${1:?$usage}; shift
 
-      # Start `nomad` agent".
-      msg "Starting nomad server/agent ..."
-      # The Nomad agent is a long running process which runs on every machine
-      # that is part of the Nomad cluster. The behavior of the agent depends
-      # on if it is running in client or server mode. Clients are responsible
-      # for running tasks, while servers are responsible for managing the
-      # cluster.
-      #
-      # The Nomad agent supports multiple configuration files, which can be
-      # provided using the -config CLI flag. The flag can accept either a file
-      # or folder. In the case of a folder, any .hcl and .json files in the
-      # folder will be loaded and merged in lexicographical order. Directories
-      # are not loaded recursively.
-      #   -config=<path>
-      # The path to either a single config file or a directory of config files
-      # to use for configuring the Nomad agent. This option may be specified
-      # multiple times. If multiple config files are used, the values from
-      # each will be merged together. During merging, values from files found
-      # later in the list are merged over values from previously parsed file.
-      #
-      # Running a dual-role agent (client + server) but not "-dev" mode.
-      nomad agent -config="$dir/nomad/config" >> "$dir/nomad/stdout" 2>> "$dir/nomad/stderr" &
-      echo "$!" > "$dir/nomad/nomad.pid"
-      setenvjqstr 'nomad_pid' $(cat $dir/nomad/nomad.pid)
-      msg "Nomad started with PID $(cat $dir/nomad/nomad.pid)"
+      # Checks
+      local nomad_server_pid_number
+      # Call without `local` to obtain the subcommand's return code.
+      if nomad_server_pid_number=wb publish socat pid
+      then
+        msg "Nomad server is already running with PID ${nomad_server_pid_number}"
+      else
+        # Start `nomad` server".
+        msg "Starting nomad server ..."
+        # The Nomad agent is a long running process which runs on every machine
+        # that is part of the Nomad cluster. The behavior of the agent depends
+        # on if it is running in client or server mode. Clients are responsible
+        # for running tasks, while servers are responsible for managing the
+        # cluster.
+        #
+        # The Nomad agent supports multiple configuration files, which can be
+        # provided using the -config CLI flag. The flag can accept either a file
+        # or folder. In the case of a folder, any .hcl and .json files in the
+        # folder will be loaded and merged in lexicographical order. Directories
+        # are not loaded recursively.
+        #   -config=<path>
+        # The path to either a single config file or a directory of config files
+        # to use for configuring the Nomad agent. This option may be specified
+        # multiple times. If multiple config files are used, the values from
+        # each will be merged together. During merging, values from files found
+        # later in the list are merged over values from previously parsed file.
+        #
+        # Running a dual-role agent (client + server) but not "-dev" mode.
+        local nomad_server_pid_file=$(backend_nomad nomad-server-pid-file)
+        nomad agent -config="$dir/nomad/config" >> "$dir/nomad/stdout" 2>> "$dir/nomad/stderr" &
+        nomad_server_pid_number="$!"
+        echo "${nomad_server_pid_number}" > "$nomad_server_pid_file"
+        msg "Nomad server started with PID ${nomad_server_pid_number}"
+      fi
 
-      # Wait for nomad agent:
-      msg "Waiting for the listening HTTP server ..."
-      local i=0
-      local patience=25
+      # Even if Nomad server was already running, try to connect to it!
+      local i=0 patience=25
+      msg "Trying/waiting for the listening HTTP server (${patience}s) ..."
       until curl -Isf 127.0.0.1:4646 2>&1 | head --lines=1 | grep --quiet "HTTP/1.1"
       do printf "%3d" $i; sleep 1
         i=$((i+1))
@@ -588,7 +596,8 @@ backend_nomad() {
           progress "nomad agent" "$(red FATAL):  workbench:  nomad agent:  patience ran out after ${patience}s, 127.0.0.1:4646"
           cat "$dir/nomad/stderr"
           backend_nomad stop-cluster "$dir"
-          fatal "nomad agent startup did not succeed:  check logs"
+          rm "$nomad_server_pid_file"
+          fatal "nomad server startup did not succeed:  check logs"
         fi
         echo -ne "\b\b\b"
       done >&2
@@ -599,9 +608,40 @@ backend_nomad() {
       local usage="USAGE: wb backend pass $op RUN-DIR"
       local dir=${1:?$usage}; shift
 
-      local nomad_pid=$(envjqr 'nomad_pid')
-      msg "Killing nomad agent (PID $nomad_pid)..."
-      kill -SIGINT "$nomad_pid"
+      local nomad_server_pid_number
+      # Call without `local` to obtain the subcommand's return code.
+      if nomad_server_pid_number=$(backend_nomad nomad-server-pid)
+      then
+        msg "Killing nomad server (PID $nomad_server_pid_number) ..."
+        kill -SIGINT "$nomad_server_pid_number"
+        local nomad_server_pid_file=$(backend_nomad nomad-server-pid-file)
+        rm "$nomad_server_pid_file"
+      else
+        msg "Nomad server is not running"
+        false
+      fi
+    ;;
+
+    nomad-server-pid-file )
+      echo "$nomad_server_dir"/nomad.pid
+    ;;
+
+    nomad-server-pid )
+      local nomad_server_pid_file=$(backend_nomad nomad-server-pid-file)
+      if test -f $nomad_server_pid_file
+      then
+        local nomad_server_pid_number=$(cat "${nomad_server_pid_file}")
+        # Check if the process is running
+        if kill -0 "${nomad_server_pid_number}"
+        then
+          echo "${nomad_server_pid_number}"
+        else
+          rm "${nomad_server_pid_file}"
+          false
+        fi
+      else
+        false
+      fi
     ;;
 
     * )
