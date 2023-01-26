@@ -12,6 +12,7 @@ usage_nomad() {
 
     nomad-driver-podman-start RUN-DIR
     nomad-server-start        RUN-DIR
+    nomad-server-stop         RUN-DIR
 EOF
 }
 
@@ -433,9 +434,7 @@ case "$op" in
         # {"@level":"debug","@message":"Could not get container stats, unknown error","@module":"podman.podmanHandle","@timestamp":"2022-12-14T14:34:16.320494Z","driver":"podman","error":"\u0026url.Error{Op:\"Get\", URL:\"http://u/v1.0.0/libpod/containers/a55f689be4d2898225c76fa12716cfa0c0dedd54a1919e82d44523a35b8d07a4/stats?stream=false\", Err:(*net.OpError)(0xc000ba5220)}","timestamp":"2022-12-14T14:34:16.320Z"}
         nomad job stop -global -no-shutdown-delay -purge -yes -verbose "$nomad_job_name" >> "$dir/nomad/stdout" 2>> "$dir/nomad/stderr"
 
-        local nomad_pid=$(envjqr 'nomad_pid')
-        msg "Killing nomad agent (PID $nomad_pid)..."
-        kill -SIGINT "$nomad_pid"
+        backend_nomad nomad-server-stop "$dir"
         ;;
 
     cleanup-cluster )
@@ -581,6 +580,16 @@ case "$op" in
         fi
         echo -ne "\b\b\b"
       done >&2
+    ;;
+
+    # Stop the Nomad server running in -dev mode (all in one server and agent)
+    nomad-server-stop )
+      local usage="USAGE: wb backend pass $op RUN-DIR"
+      local dir=${1:?$usage}; shift
+
+      local nomad_pid=$(envjqr 'nomad_pid')
+      msg "Killing nomad agent (PID $nomad_pid)..."
+      kill -SIGINT "$nomad_pid"
     ;;
 
     * ) usage_nomad;; esac
