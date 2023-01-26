@@ -9,6 +9,7 @@
 
 module  Cardano.TxGenerator.PlutusContext
         ( PlutusAutoLimitingFactor(..)
+        , PlutusBudgetFittingStrategy(..)
         , PlutusBudgetSummary(..)
         , plutusAutoBudgetMaxOut
         , plutusBudgetSummary
@@ -55,6 +56,10 @@ data PlutusAutoLimitingFactor
   | ExceededStepLimit
   deriving (Generic, Eq, Show, ToJSON)
 
+data PlutusBudgetFittingStrategy
+  = TargetTxExpenditure
+  | TargetBlockExpenditure Double
+
 instance ToJSON ScriptData where
   toJSON = scriptDataToJson ScriptDataJsonDetailedSchema
 
@@ -81,6 +86,7 @@ plutusAutoBudgetMaxOut ::
      ProtocolParameters
   -> ScriptInAnyLang
   -> PlutusAutoBudget
+  -> PlutusBudgetFittingStrategy
   -> Int
   -> Either TxGenError (PlutusAutoBudget, Int, [PlutusAutoLimitingFactor])
 plutusAutoBudgetMaxOut
@@ -90,6 +96,7 @@ plutusAutoBudgetMaxOut
     }
   script
   pab@PlutusAutoBudget{..}
+  target
   txInputs
   = do
     (n, limitFactors) <- binarySearch isInLimits 0 searchUpperBound
@@ -99,15 +106,16 @@ plutusAutoBudgetMaxOut
     -- The highest loop counter that is tried - this is about 10 times the current mainnet limit.
     searchUpperBound  = 20000
 
-    targetTxPerBlock :: Int
-    targetTxPerBlock  =
+    targetTxPerBlock :: Double -> Int
+    targetTxPerBlock  s =
       let mTx :: Double = fromIntegral (executionMemory budgetPerTx)
-      in ceiling $ max
+      in ceiling $ s * max
         (fromIntegral (executionSteps budgetPerBlock) / fromIntegral (executionSteps budgetPerTx))
         (fromIntegral (executionMemory budgetPerBlock) / mTx)
 
-    -- targetBudget      = calc budgetPerTx div txInputs                        -- optimize for maximum expenditure of per-tx-budget
-    targetBudget      = calc budgetPerBlock div (targetTxPerBlock * txInputs)   -- optimize for maximum expenditure of per-block-budget
+    targetBudget = case target of
+      TargetTxExpenditure       -> calc budgetPerTx div txInputs                            -- optimize for maximum expenditure of per-tx-budget
+      TargetBlockExpenditure s  -> calc budgetPerBlock div (targetTxPerBlock s * txInputs)  -- optimize for maximum expenditure of per-block-budget
 
     toLoopArgument n = scriptDataModifyNumber (+ n) autoBudgetRedeemer
 
@@ -118,7 +126,7 @@ plutusAutoBudgetMaxOut
       pure $   [ExceededStepLimit   | executionSteps used > executionSteps targetBudget]
             ++ [ExceededMemoryLimit | executionMemory used > executionMemory targetBudget]
 
-plutusAutoBudgetMaxOut _ _ _ _
+plutusAutoBudgetMaxOut _ _ _ _ _
   = error "plutusAutoBudgetMaxOut : call to function in pre-Alonzo era. This is an implementation error in tx-generator."
 
 plutusBudgetSummary ::

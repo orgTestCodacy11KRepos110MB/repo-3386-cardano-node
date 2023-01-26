@@ -46,7 +46,7 @@ type AsyncBenchmarkControl = (Async (), [Async ()], IO SubmissionSummary, IO ())
 waitBenchmark :: Tracer IO (TraceBenchTxSubmit TxId) -> AsyncBenchmarkControl -> ExceptT TxGenError IO ()
 waitBenchmark traceSubmit (feeder, workers, mkSummary, _) = liftIO $ do
   mapM_ waitCatch (feeder : workers)
-  traceWith traceSubmit =<< TraceBenchTxSubSummary <$> mkSummary
+  traceWith traceSubmit . TraceBenchTxSubSummary =<< mkSummary
 
 lookupNodeAddress ::
   NodeAddress' NodeHostIPv4Address -> IO AddrInfo
