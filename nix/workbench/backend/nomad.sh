@@ -5,9 +5,10 @@ usage_nomad() {
 
     Nomad-specific:
 
-    service-start      RUN-DIR SERVICE
-    service-stop       RUN-DIR SERVICE
-    is-service-running RUN-DIR SERVICE
+    task-service-start      RUN-DIR TASK SERVICE
+    task-service-stop       RUN-DIR TASK SERVICE
+    is-task-service-running RUN-DIR TASK SERVICE
+    task-supervisorctl      RUN-DIR TASK ACTION [ARGS]
 
 EOF
 }
@@ -27,7 +28,7 @@ case "$op" in
         ;;
 
     setenv-defaults )
-        local usage="USAGE: wb nomad $op PROFILE-DIR"
+        local usage="USAGE: wb backend $op PROFILE-DIR"
         local profile_dir=${1:?$usage}
 
         # TODO: stateful nomad ?
@@ -83,12 +84,12 @@ case "$op" in
     # https://man.archlinux.org/man/containers-policy.json.5
 
     allocate-run )
-        local usage="USAGE: wb nomad $op RUN-DIR"
+        local usage="USAGE: wb backend $op RUN-DIR"
         local dir=${1:?$usage}; shift
 
         while test $# -gt 0
         do case "$1" in
-               --* ) msg "FATAL:  unknown flag '$1'"; usage_docker;;
+               --* ) msg "FATAL:  unknown flag '$1'"; usage_nomad;;
                * ) break;; esac; shift; done
 
         # The `genesis/utxo-keys` directory is used as a volume for the
@@ -152,78 +153,32 @@ case "$op" in
         ;;
 
     describe-run )
-        local usage="USAGE: wb nomad $op RUN-DIR"
+        local usage="USAGE: wb backend $op RUN-DIR"
         local dir=${1:?$usage}
 
         echo "  - Nomad job: $(realpath $dir)/nomad/nomad-job.json"
         ;;
 
-    # Nomad-specific
-    service-start )
-        local usage="USAGE: wb nomad $op RUN-DIR NODE-NAME"
-        local dir=${1:?$usage}; shift
-        local task=${1:?$usage}; shift
-        local service=${1:?$usage}; shift
-
-        msg "Starting supervisord service \"$service\" inside nomad task/container \"$task\" ..."
-        backend_nomad nomad-alloc-exec-supervisorctl "$dir" "$task" start "$service"
-        ;;
-
-    # Nomad-specific
-    service-stop )
-        local usage="USAGE: wb nomad $op RUN-DIR NODE-NAME"
-        local dir=${1:?$usage}; shift
-        local task=${1:?$usage}; shift
-        local service=${1:?$usage}; shift
-
-        msg "Stopping supervisord service \"$service\" inside nomad task/container \"$task\" ..."
-        backend_nomad nomad-alloc-exec-supervisorctl "$dir" "$task" stop "$service"
-        ;;
-
-    # Nomad-specific
-    is-service-running )
-        local usage="USAGE: wb nomad $op RUN-DIR DOCKER-SERVICE"
-        local dir=${1:?$usage}; shift
-        local task=${1:?$usage}; shift
-        local service=${1:?$usage}; shift
-
-        backend_nomad nomad-alloc-exec-supervisorctl "$dir" "$task" status "$service" > /dev/null && true
-        ;;
-
-    # Nomad-specific
-    nomad-alloc-exec-supervisorctl )
-        local usage="USAGE: wb nomad $op RUN-DIR NODE-NAME"
-        local dir=${1:?$usage}; shift
-        local task=${1:?$usage}; shift
-        local action=${1:?$usage}; shift
-
-        local nomad_alloc_id=$(envjqr 'nomad_alloc_id')
-        local container_supervisor_nix=$(envjqr 'container_supervisor_nix')
-        local container_supervisord_url=$(envjqr 'container_supervisord_url')
-        local container_supervisord_conf=$(envjqr 'container_supervisord_conf')
-        nomad alloc exec --task "$task" "$nomad_alloc_id" "$container_supervisor_nix"/bin/supervisorctl --serverurl "$container_supervisord_url" --configuration "$container_supervisord_conf" "$action" $@
-        ;;
-
     start-node )
-        local usage="USAGE: wb nomad $op RUN-DIR NODE-NAME"
+        local usage="USAGE: wb backend $op RUN-DIR NODE-NAME"
         local dir=${1:?$usage}; shift
         local node=${1:?$usage}; shift
 
-        backend_nomad service-start "$dir" $node $node
+        backend_nomad task-service-start "$dir" $node $node
         # Always wait for the node to be ready.
         backend_nomad wait-node "$dir" $node
         ;;
 
     stop-node )
-        local usage="USAGE: wb nomad $op RUN-DIR NODE-NAME"
+        local usage="USAGE: wb backend $op RUN-DIR NODE-NAME"
         local dir=${1:?$usage}; shift
         local node=${1:?$usage}; shift
 
-        backend_nomad service-stop "$dir" $node $node
+        backend_nomad task-service-stop "$dir" $node $node
         ;;
 
     wait-node )
-        local usage="USAGE: wb nomad $op RUN-DIR [NODE-NAME]"
+        local usage="USAGE: wb backend $op RUN-DIR [NODE-NAME]"
         local dir=${1:?$usage}; shift
         local node=${1:-$(dirname $CARDANO_NODE_SOCKET_PATH | xargs basename)}; shift
         local socket=$(backend_nomad get-node-socket-path "$dir" $node)
@@ -245,7 +200,7 @@ case "$op" in
         ;;
 
     start-nodes )
-        local usage="USAGE: wb nomad $op RUN-DIR [HONOR_AUTOSTART=]"
+        local usage="USAGE: wb backend $op RUN-DIR [HONOR_AUTOSTART=]"
         local dir=${1:?$usage}; shift
         local honor_autostart=${1:-}
 
@@ -269,12 +224,11 @@ case "$op" in
         ;;
 
     start )
-        local usage="USAGE: wb nomad $op RUN-DIR"
+        local usage="USAGE: wb backend $op RUN-DIR"
         local dir=${1:?$usage}; shift
         local one_tracer_per_node=$(envjq 'one_tracer_per_node')
 
-        msg "Preparing podman API service for nomad driver \`nomad-driver-podman\` ..."
-        nomad_start_podman_service "$dir"
+        backend_nomad nomad-driver-podman-start
 
         # Start `nomad` agent".
         msg "Starting nomad agent ..."
@@ -375,7 +329,7 @@ case "$op" in
             local nodes=($(jq_tolist keys "$dir"/node-specs.json))
             for node in ${nodes[*]}
             do
-              if ! backend_nomad service-start "$dir" "$node" tracer
+              if ! backend_nomad task-service-start "$dir" "$node" tracer
               then
                 fatal "check logs in $dir/tracer/$node/stderr"
               fi
@@ -398,7 +352,7 @@ case "$op" in
               echo " $node's tracer up (${i}s)" >&2
             done
           else
-            if ! backend_nomad service-start "$dir" tracer tracer
+            if ! backend_nomad task-service-start "$dir" tracer tracer
             then
               fatal "check logs in $dir/tracer/stderr"
             fi
@@ -424,7 +378,7 @@ case "$op" in
         ;;
 
     get-node-socket-path )
-        local usage="USAGE: wb nomad $op RUN-DIR NODE-NAME"
+        local usage="USAGE: wb backend $op RUN-DIR NODE-NAME"
         local dir=${1:?$usage}
         local node_name=${2:?$usage}
 
@@ -432,25 +386,25 @@ case "$op" in
         ;;
 
     start-generator )
-        local usage="USAGE: wb nomad $op RUN-DIR"
+        local usage="USAGE: wb backend $op RUN-DIR"
         local dir=${1:?$usage}; shift
 
         while test $# -gt 0
         do case "$1" in
-               --* ) msg "FATAL:  unknown flag '$1'"; usage_docker;;
+               --* ) msg "FATAL:  unknown flag '$1'"; usage_nomad;;
                * ) break;; esac; shift; done
 
-        backend_nomad service-start "$dir" node-0 generator
+        backend_nomad task-service-start "$dir" node-0 generator
         ;;
 
     wait-node-stopped )
-        local usage="USAGE: wb nomad $op RUN-DIR NODE"
+        local usage="USAGE: wb backend $op RUN-DIR NODE"
         local dir=${1:?$usage}; shift
         local node=${1:?$usage}; shift
 
         progress_ne "docker" "waiting until $node stops:  ....."
         local i=0
-        while backend_nomad is-service-running "$dir" "$node" "$node"
+        while backend_nomad is-task-service-running "$dir" "$node" "$node"
         do
           echo -ne "\b\b\b\b\b"; printf "%5d" $i >&2; i=$((i+1))
           sleep 1
@@ -459,7 +413,7 @@ case "$op" in
         ;;
 
     wait-pools-stopped )
-        local usage="USAGE: wb nomad $op RUN-DIR"
+        local usage="USAGE: wb backend $op RUN-DIR"
         local dir=${1:?$usage}; shift
 
         local i=0 pools=$(jq .composition.n_pool_hosts $dir/profile.json) start_time=$(date +%s)
@@ -468,7 +422,7 @@ case "$op" in
 
         for ((pool_ix=0; pool_ix < $pools; pool_ix++))
         do
-          while backend_nomad is-service-running "$dir" "node-${pool_ix}" "node-${pool_ix}" && test -f $dir/flag/cluster-termination
+          while backend_nomad is-task-service-running "$dir" "node-${pool_ix}" "node-${pool_ix}" && test -f $dir/flag/cluster-termination
           do
             echo -ne "\b\b\b\b\b\b"; printf "%6d" $((i + 1)); i=$((i+1))
             sleep 1
@@ -483,13 +437,13 @@ case "$op" in
         ;;
 
     stop-cluster )
-        local usage="USAGE: wb nomad $op RUN-DIR"
+        local usage="USAGE: wb backend $op RUN-DIR"
         local dir=${1:?$usage}; shift
         local nomad_alloc_id=$(envjqr 'nomad_alloc_id')
         local nomad_job_name=$(envjqr 'nomad_job_name')
 
         # Stop generator.
-        backend_nomad service-stop "$dir" node-0 generator || true
+        backend_nomad task-service-stop "$dir" node-0 generator || true
         # Stop tracer(s).
         local one_tracer_per_node=$(envjq 'one_tracer_per_node')
         if jqtest ".node.tracer" "$dir"/profile.json
@@ -499,16 +453,16 @@ case "$op" in
             local nodes=($(jq_tolist keys "$dir"/node-specs.json))
             for node in ${nodes[*]}
             do
-              backend_nomad service-stop "$dir" "$node" tracer || true
+              backend_nomad task-service-stop "$dir" "$node" tracer || true
             done
           else
-            backend_nomad service-stop "$dir" tracer tracer || true
+            backend_nomad task-service-stop "$dir" tracer tracer || true
           fi
         fi
         # Stop nodes.
         for node in $(jq_tolist 'keys' "$dir"/node-specs.json)
         do
-          backend_nomad service-stop "$dir" "$node" "$node" || true
+          backend_nomad task-service-stop "$dir" "$node" "$node" || true
         done
 
         msg "Stopping nomad job ..."
@@ -524,7 +478,7 @@ case "$op" in
         ;;
 
     cleanup-cluster )
-        local usage="USAGE: wb nomad $op RUN-DIR"
+        local usage="USAGE: wb backend $op RUN-DIR"
         local dir=${1:?$usage}; shift
 
         msg "nomad:  resetting cluster state in:  $dir"
@@ -535,7 +489,55 @@ case "$op" in
         rm -rf $dir/nomad/data/*
         ;;
 
-    * ) usage_docker;; esac
+    # Nomad backend specific subcommands
+    ####################################
+
+    ## Nomad job tasks queries
+    ##########################
+
+    task-service-start )
+      local usage="USAGE: wb backend pass $op RUN-DIR NODE-NAME"
+      local dir=${1:?$usage}; shift
+      local task=${1:?$usage}; shift
+      local service=${1:?$usage}; shift
+
+      msg "Starting supervisord service \"$service\" inside nomad task/container\"$task\" ..."
+      backend_nomad task-supervisorctl "$dir" "$task" start "$service"
+      ;;
+
+    task-service-stop )
+      local usage="USAGE: wb backend pass $op RUN-DIR NODE-NAME"
+      local dir=${1:?$usage}; shift
+      local task=${1:?$usage}; shift
+      local service=${1:?$usage}; shift
+
+      msg "Stopping supervisord service \"$service\" inside nomad task/container\"$task\" ..."
+      backend_nomad task-supervisorctl "$dir" "$task" stop "$service"
+      ;;
+
+    is-task-service-running )
+      local usage="USAGE: wb backend pass $op RUN-DIR DOCKER-SERVICE"
+      local dir=${1:?$usage}; shift
+      local task=${1:?$usage}; shift
+      local service=${1:?$usage}; shift
+
+      backend_nomad task-supervisorctl "$dir" "$task" status "$service" > /dev/null && true
+      ;;
+
+    task-supervisorctl )
+      local usage="USAGE: wb backend pass $op RUN-DIR NODE-NAME"
+      local dir=${1:?$usage}; shift
+      local task=${1:?$usage}; shift
+      local action=${1:?$usage}; shift
+
+      local nomad_alloc_id=$(envjqr 'nomad_alloc_id')
+      local container_supervisor_nix=$(envjqr 'container_supervisor_nix')
+      local container_supervisord_url=$(envjqr 'container_supervisord_url')
+      local container_supervisord_conf=$(envjqr 'container_supervisord_conf')
+      nomad alloc exec --task "$task" "$nomad_alloc_id" "$container_supervisor_nix"/bin/supervisorctl --serverurl "$container_supervisord_url" --configuration "$container_supervisord_conf" "$action" $@
+      ;;
+
+    * ) usage_nomad;; esac
 }
 
 # Start the `podman` API service needed by `nomad`.
