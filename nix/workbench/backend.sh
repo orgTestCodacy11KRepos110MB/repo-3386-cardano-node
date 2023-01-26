@@ -56,7 +56,7 @@ case "${op}" in
     cleanup-cluster )            backend_$WB_BACKEND "$@";;
 
     ## Handle non-generic calls:
-    passthrough | pass )         backend_$WB_BACKEND "$@";;
+    passthrough | pass )         shift; backend_$WB_BACKEND "$@";;
 
     assert-is )
         local usage="USAGE: wb run $op BACKEND-NAME"
