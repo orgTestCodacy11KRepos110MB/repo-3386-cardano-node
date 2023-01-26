@@ -10,6 +10,7 @@ usage_nomad() {
     is-task-service-running RUN-DIR TASK SERVICE
     task-supervisorctl      RUN-DIR TASK ACTION [ARGS]
 
+    nomad-driver-podman-start RUN-DIR
 EOF
 }
 
@@ -228,7 +229,7 @@ case "$op" in
         local dir=${1:?$usage}; shift
         local one_tracer_per_node=$(envjq 'one_tracer_per_node')
 
-        backend_nomad nomad-driver-podman-start
+        backend_nomad nomad-driver-podman-start "$dir"
 
         # Start `nomad` agent".
         msg "Starting nomad agent ..."
@@ -537,17 +538,20 @@ case "$op" in
       nomad alloc exec --task "$task" "$nomad_alloc_id" "$container_supervisor_nix"/bin/supervisorctl --serverurl "$container_supervisord_url" --configuration "$container_supervisord_conf" "$action" $@
       ;;
 
-    * ) usage_nomad;; esac
-}
+    ## Nomad server/agent subcommands
+    #################################
 
-# Start the `podman` API service needed by `nomad`.
-nomad_start_podman_service() {
-    local dir=$1
-    local podman_socket_path=$(envjqr 'podman_socket_path')
-#    if test -S "$socket"
-#    then
-#        msg "Podman API service was already running"
-#    else
+    # Start the `podman` API service needed by `nomad`.
+    nomad-driver-podman-start )
+      local usage="USAGE: wb backend pass $op RUN-DIR"
+      local dir=${1:?$usage}; shift
+
+      msg "Preparing podman API service for nomad driver \`nomad-driver-podman\` ..."
+      local podman_socket_path=$(envjqr 'podman_socket_path')
+#      if test -S "$socket"
+#      then
+#          msg "Podman API service was already running"
+#      else
         # The session is kept open waiting for a new connection for 60 seconds.
         # https://discuss.hashicorp.com/t/nomad-podman-rhel8-driver-difficulties/21877/4
         # `--time`: Time until the service session expires in seconds. Use 0
@@ -557,17 +561,23 @@ nomad_start_podman_service() {
         local patience=5
         while test ! -S "$podman_socket_path"
         do printf "%3d" $i; sleep 1
-            i=$((i+1))
-            if test $i -ge $patience
-            then echo
-                progress "nomad-driver-podman" "$(red FATAL):  workbench:  nomad-driver-podman:  patience ran out after ${patience}s, socket $podman_socket_path"
-                backend_nomad stop-cluster "$dir"
-                fatal "nomad-driver-podman startup did not succeed:  check logs"
-            fi
-            echo -ne "\b\b\b"
+          i=$((i+1))
+          if test $i -ge $patience
+          then echo
+              progress "nomad-driver-podman" "$(red FATAL):  workbench:  nomad-driver-podman:  patience ran out after ${patience}s, socket $podman_socket_path"
+              backend_nomad stop-cluster "$dir"
+              fatal "nomad-driver-podman startup did not succeed:  check logs"
+          fi
+          echo -ne "\b\b\b"
         done >&2
-#    fi
-    msg "Podman API service started"
+#      fi
+      msg "Podman API service started"
+    ;;
+
+    nomad-agent-start )
+    ;;
+
+    * ) usage_nomad;; esac
 }
 
 # Configure `nomad` and its `podman` plugin / task driver
