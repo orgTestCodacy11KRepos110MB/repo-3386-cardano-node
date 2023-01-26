@@ -11,6 +11,7 @@ usage_nomad() {
     task-supervisorctl      RUN-DIR TASK ACTION [ARGS]
 
     nomad-driver-podman-start RUN-DIR
+    nomad-server-start        RUN-DIR
 EOF
 }
 
@@ -231,48 +232,7 @@ case "$op" in
 
         backend_nomad nomad-driver-podman-start "$dir"
 
-        # Start `nomad` agent".
-        msg "Starting nomad agent ..."
-        # The Nomad agent is a long running process which runs on every machine
-        # that is part of the Nomad cluster. The behavior of the agent depends
-        # on if it is running in client or server mode. Clients are responsible
-        # for running tasks, while servers are responsible for managing the
-        # cluster.
-        #
-        # The Nomad agent supports multiple configuration files, which can be
-        # provided using the -config CLI flag. The flag can accept either a file
-        # or folder. In the case of a folder, any .hcl and .json files in the
-        # folder will be loaded and merged in lexicographical order. Directories
-        # are not loaded recursively.
-        #   -config=<path>
-        # The path to either a single config file or a directory of config files
-        # to use for configuring the Nomad agent. This option may be specified
-        # multiple times. If multiple config files are used, the values from
-        # each will be merged together. During merging, values from files found
-        # later in the list are merged over values from previously parsed file.
-        #
-        # Running a dual-role agent (client + server) but not "-dev" mode.
-        nomad agent -config="$dir/nomad/config" >> "$dir/nomad/stdout" 2>> "$dir/nomad/stderr" &
-        echo "$!" > "$dir/nomad/nomad.pid"
-        setenvjqstr 'nomad_pid' $(cat $dir/nomad/nomad.pid)
-        msg "Nomad started with PID $(cat $dir/nomad/nomad.pid)"
-
-        # Wait for nomad agent:
-        msg "Waiting for the listening HTTP server ..."
-        local i=0
-        local patience=25
-        until curl -Isf 127.0.0.1:4646 2>&1 | head --lines=1 | grep --quiet "HTTP/1.1"
-        do printf "%3d" $i; sleep 1
-            i=$((i+1))
-            if test $i -ge $patience
-            then echo
-                progress "nomad agent" "$(red FATAL):  workbench:  nomad agent:  patience ran out after ${patience}s, 127.0.0.1:4646"
-                cat "$dir/nomad/stderr"
-                backend_nomad stop-cluster "$dir"
-                fatal "nomad agent startup did not succeed:  check logs"
-            fi
-            echo -ne "\b\b\b"
-        done >&2
+        backend_nomad nomad-server-start "$dir"
 
         msg "Starting nomad job ..."
         # Upon successful job submission, this command will immediately enter
@@ -574,7 +534,53 @@ case "$op" in
       msg "Podman API service started"
     ;;
 
-    nomad-agent-start )
+    # Start the Nomad in -dev mode (all in one server and agent)
+    nomad-server-start )
+      local usage="USAGE: wb backend pass $op RUN-DIR"
+      local dir=${1:?$usage}; shift
+
+      # Start `nomad` agent".
+      msg "Starting nomad server/agent ..."
+      # The Nomad agent is a long running process which runs on every machine
+      # that is part of the Nomad cluster. The behavior of the agent depends
+      # on if it is running in client or server mode. Clients are responsible
+      # for running tasks, while servers are responsible for managing the
+      # cluster.
+      #
+      # The Nomad agent supports multiple configuration files, which can be
+      # provided using the -config CLI flag. The flag can accept either a file
+      # or folder. In the case of a folder, any .hcl and .json files in the
+      # folder will be loaded and merged in lexicographical order. Directories
+      # are not loaded recursively.
+      #   -config=<path>
+      # The path to either a single config file or a directory of config files
+      # to use for configuring the Nomad agent. This option may be specified
+      # multiple times. If multiple config files are used, the values from
+      # each will be merged together. During merging, values from files found
+      # later in the list are merged over values from previously parsed file.
+      #
+      # Running a dual-role agent (client + server) but not "-dev" mode.
+      nomad agent -config="$dir/nomad/config" >> "$dir/nomad/stdout" 2>> "$dir/nomad/stderr" &
+      echo "$!" > "$dir/nomad/nomad.pid"
+      setenvjqstr 'nomad_pid' $(cat $dir/nomad/nomad.pid)
+      msg "Nomad started with PID $(cat $dir/nomad/nomad.pid)"
+
+      # Wait for nomad agent:
+      msg "Waiting for the listening HTTP server ..."
+      local i=0
+      local patience=25
+      until curl -Isf 127.0.0.1:4646 2>&1 | head --lines=1 | grep --quiet "HTTP/1.1"
+      do printf "%3d" $i; sleep 1
+        i=$((i+1))
+        if test $i -ge $patience
+        then echo
+          progress "nomad agent" "$(red FATAL):  workbench:  nomad agent:  patience ran out after ${patience}s, 127.0.0.1:4646"
+          cat "$dir/nomad/stderr"
+          backend_nomad stop-cluster "$dir"
+          fatal "nomad agent startup did not succeed:  check logs"
+        fi
+        echo -ne "\b\b\b"
+      done >&2
     ;;
 
     * ) usage_nomad;; esac
