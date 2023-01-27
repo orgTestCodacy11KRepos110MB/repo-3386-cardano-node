@@ -145,12 +145,18 @@ source-repository-package
   tag: 4ec92ded05ccf59ba4a874be4b404ac1b6d666b6
   --sha256: 00fvvaf4ir4hskq4a6gggbh2wmdvy8j8kn6s4m1p1vlh8m8mq514
 
+source-repository-package
+  type: git
+  location: https://github.com/bolt12/ekg-forward
+  tag: 610a24b44d46b570eb283d52ce7f054a5723ab8f
+  --sha256: sha256-ElV4o3acqYhdI+/PlskYWLEu55SQFDyq4BDThi6ICpI=
+
 -- And has the adjustments for the ledger refactor
 source-repository-package
    type: git
    location: https://github.com/input-output-hk/ouroboros-network
-   tag: 72863b0fc78abdc2b8e29f0dda96c06da3dd11d0
-   --sha256: 0qwvx04l9q3h7acb0a3b8iarqcn5bkqhwaplbga5pvryqp3lhn00
+   tag: 06cddc16213c3a79623c7a772213deea8384804f
+   --sha256: sha256-H/cCOTW9DtAioXmK5SwMWDrjWqp25kOO25KZEVdDSy8=
    subdir:
      monoidal-synchronisation
      network-mux

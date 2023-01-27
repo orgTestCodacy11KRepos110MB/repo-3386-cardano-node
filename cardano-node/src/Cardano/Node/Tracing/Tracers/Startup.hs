@@ -317,7 +317,7 @@ ppStartupInfoTrace (NetworkConfig localRoots publicRoots useLedgerAfter) =
   , "  " ++ intercalate "\n  " (map (\(x,y) -> show (x, Map.assocs y))
                                     localRoots)
   , "Public Roots:"
-  , "  " ++ intercalate "\n  " (map show publicRoots)
+  , "  " ++ intercalate "\n  " (map show (Map.toList publicRoots))
   , case useLedgerAfter of
       UseLedgerAfter slotNo -> "Get root peers from the ledger after slot "
                             ++ show (unSlotNo slotNo)

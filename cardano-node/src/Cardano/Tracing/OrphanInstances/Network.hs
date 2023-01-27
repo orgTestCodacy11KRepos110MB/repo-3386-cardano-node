@@ -386,35 +386,36 @@ instance HasPrivacyAnnotation (TracePeerSelection addr)
 instance HasSeverityAnnotation (TracePeerSelection addr) where
   getSeverityAnnotation ev =
     case ev of
-      TraceLocalRootPeersChanged {} -> Notice
-      TraceTargetsChanged        {} -> Notice
-      TracePublicRootsRequest    {} -> Info
-      TracePublicRootsResults    {} -> Info
-      TracePublicRootsFailure    {} -> Error
-      TraceGossipRequests        {} -> Debug
-      TraceGossipResults         {} -> Debug
-      TraceForgetColdPeers       {} -> Info
-      TracePromoteColdPeers      {} -> Info
-      TracePromoteColdLocalPeers {} -> Info
-      TracePromoteColdFailed     {} -> Info
-      TracePromoteColdDone       {} -> Info
-      TracePromoteWarmPeers      {} -> Info
-      TracePromoteWarmLocalPeers {} -> Info
-      TracePromoteWarmFailed     {} -> Info
-      TracePromoteWarmDone       {} -> Info
-      TracePromoteWarmAborted    {} -> Info
-      TraceDemoteWarmPeers       {} -> Info
-      TraceDemoteWarmFailed      {} -> Info
-      TraceDemoteWarmDone        {} -> Info
-      TraceDemoteHotPeers        {} -> Info
-      TraceDemoteLocalHotPeers   {} -> Info
-      TraceDemoteHotFailed       {} -> Info
-      TraceDemoteHotDone         {} -> Info
-      TraceDemoteAsynchronous    {} -> Info
-      TraceDemoteLocalAsynchronous {} -> Warning
-      TraceGovernorWakeup        {} -> Info
-      TraceChurnWait             {} -> Info
-      TraceChurnMode             {} -> Info
+      TraceLocalRootPeersChanged    {} -> Notice
+      TraceTargetsChanged           {} -> Notice
+      TracePublicRootsRequest       {} -> Info
+      TracePublicRootsResults       {} -> Info
+      TracePublicRootsFailure       {} -> Error
+      TracePeerShareRequests        {} -> Debug
+      TracePeerShareResults         {} -> Debug
+      TracePeerShareResultsFiltered {} -> Debug
+      TraceForgetColdPeers          {} -> Info
+      TracePromoteColdPeers         {} -> Info
+      TracePromoteColdLocalPeers    {} -> Info
+      TracePromoteColdFailed        {} -> Info
+      TracePromoteColdDone          {} -> Info
+      TracePromoteWarmPeers         {} -> Info
+      TracePromoteWarmLocalPeers    {} -> Info
+      TracePromoteWarmFailed        {} -> Info
+      TracePromoteWarmDone          {} -> Info
+      TracePromoteWarmAborted       {} -> Info
+      TraceDemoteWarmPeers          {} -> Info
+      TraceDemoteWarmFailed         {} -> Info
+      TraceDemoteWarmDone           {} -> Info
+      TraceDemoteHotPeers           {} -> Info
+      TraceDemoteLocalHotPeers      {} -> Info
+      TraceDemoteHotFailed          {} -> Info
+      TraceDemoteHotDone            {} -> Info
+      TraceDemoteAsynchronous       {} -> Info
+      TraceDemoteLocalAsynchronous  {} -> Warning
+      TraceGovernorWakeup           {} -> Info
+      TraceChurnWait                {} -> Info
+      TraceChurnMode                {} -> Info
 
 instance HasPrivacyAnnotation (DebugPeerSelection addr)
 instance HasSeverityAnnotation (DebugPeerSelection addr) where
@@ -1381,7 +1382,7 @@ instance ToJSON IP where
 instance ToObject TracePublicRootPeers where
   toObject _verb (TracePublicRootRelayAccessPoint relays) =
     mconcat [ "kind" .= String "PublicRootRelayAddresses"
-             , "relayAddresses" .= Aeson.toJSONList relays
+             , "relayAddresses" .= Aeson.toJSON relays
              ]
   toObject _verb (TracePublicRootDomains domains) =
     mconcat [ "kind" .= String "PublicRootDomains"
@@ -1453,16 +1454,20 @@ instance ToObject (TracePeerSelection SockAddr) where
              , "group" .= group
              , "diffTime" .= dt
              ]
-  toObject _verb (TraceGossipRequests targetKnown actualKnown aps sps) =
-    mconcat [ "kind" .= String "GossipRequests"
+  toObject _verb (TracePeerShareRequests targetKnown actualKnown aps sps) =
+    mconcat [ "kind" .= String "PeerShareRequests"
              , "targetKnown" .= targetKnown
              , "actualKnown" .= actualKnown
              , "availablePeers" .= Aeson.toJSONList (toList aps)
              , "selectedPeers" .= Aeson.toJSONList (toList sps)
              ]
-  toObject _verb (TraceGossipResults res) =
-    mconcat [ "kind" .= String "GossipResults"
-             , "result" .= Aeson.toJSONList (map ( first show <$> ) res)
+  toObject _verb (TracePeerShareResults res) =
+    mconcat [ "kind" .= String "PeerShareResults"
+             , "result" .= Aeson.toJSONList (map show res)
+             ]
+  toObject _verb (TracePeerShareResultsFiltered res) =
+    mconcat [ "kind" .= String "PeerShareResultsFiltered"
+             , "result" .= Aeson.toJSONList res
              ]
   toObject _verb (TraceForgetColdPeers targetKnown actualKnown sp) =
     mconcat [ "kind" .= String "ForgeColdPeers"
@@ -1762,9 +1767,10 @@ instance ToJSON NodeToClientVersion where
   toJSON x = String (pack $ show x)
 
 instance ToJSON NodeToNodeVersionData where
-  toJSON (NodeToNodeVersionData (NetworkMagic m) dm) =
+  toJSON (NodeToNodeVersionData (NetworkMagic m) dm ps) =
     Aeson.object [ "networkMagic" .= toJSON m
                  , "diffusionMode" .= show dm
+                 , "peerSharing" .= show ps
                  ]
 
 instance ToJSON NodeToClientVersionData where

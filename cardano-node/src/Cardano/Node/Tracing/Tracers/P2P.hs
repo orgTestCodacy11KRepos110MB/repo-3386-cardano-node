@@ -196,7 +196,7 @@ severityPublicRootPeers _ = Info
 instance LogFormatting TracePublicRootPeers where
   forMachine _dtal (TracePublicRootRelayAccessPoint relays) =
     mconcat [ "kind" .= String "PublicRootRelayAddresses"
-             , "relayAddresses" .= toJSONList relays
+             , "relayAddresses" .= toJSON relays
              ]
   forMachine _dtal (TracePublicRootDomains domains) =
     mconcat [ "kind" .= String "PublicRootDomains"
@@ -280,8 +280,10 @@ severityPeerSelection TraceTargetsChanged        {} = Notice
 severityPeerSelection TracePublicRootsRequest    {} = Info
 severityPeerSelection TracePublicRootsResults    {} = Info
 severityPeerSelection TracePublicRootsFailure    {} = Error
-severityPeerSelection TraceGossipRequests        {} = Debug
-severityPeerSelection TraceGossipResults         {} = Debug
+severityPeerSelection TracePeerShareRequests     {} = Debug
+severityPeerSelection TracePeerShareResults      {} = Debug
+severityPeerSelection TracePeerShareResultsFiltered {}
+                                                    = Debug
 severityPeerSelection TraceForgetColdPeers       {} = Info
 severityPeerSelection TracePromoteColdPeers      {} = Info
 severityPeerSelection TracePromoteColdLocalPeers {} = Info
@@ -333,16 +335,20 @@ instance LogFormatting (TracePeerSelection SockAddr) where
              , "group" .= group
              , "diffTime" .= dt
              ]
-  forMachine _dtal (TraceGossipRequests targetKnown actualKnown aps sps) =
-    mconcat [ "kind" .= String "GossipRequests"
+  forMachine _dtal (TracePeerShareRequests targetKnown actualKnown aps sps) =
+    mconcat [ "kind" .= String "PeerShareRequests"
              , "targetKnown" .= targetKnown
              , "actualKnown" .= actualKnown
              , "availablePeers" .= toJSONList (toList aps)
              , "selectedPeers" .= toJSONList (toList sps)
              ]
-  forMachine _dtal (TraceGossipResults res) =
-    mconcat [ "kind" .= String "GossipResults"
-             , "result" .= toJSONList (map (first show <$>) res)
+  forMachine _dtal (TracePeerShareResults res) =
+    mconcat [ "kind" .= String "PeerShareResults"
+             , "result" .= toJSONList (map ( bimap show show <$> ) res)
+             ]
+  forMachine _dtal (TracePeerShareResultsFiltered res) =
+    mconcat [ "kind" .= String "PeerShareResultsFiltered"
+             , "result" .= toJSONList res
              ]
   forMachine _dtal (TraceForgetColdPeers targetKnown actualKnown sp) =
     mconcat [ "kind" .= String "ForgeColdPeers"

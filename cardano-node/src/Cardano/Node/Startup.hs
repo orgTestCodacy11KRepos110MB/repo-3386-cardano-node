@@ -96,7 +96,7 @@ data StartupTrace blk =
   -- updated.
   --
   | NetworkConfig [(Int, Map RelayAccessPoint PeerAdvertise)]
-                  [RelayAccessPoint]
+                  (Map RelayAccessPoint PeerAdvertise)
                   UseLedgerAfter
 
   -- | Warn when 'EnableP2P' is set.
