@@ -357,16 +357,20 @@ def all_profile_variants:
   |
    ($scenario_fixed_loaded * $dataset_small * $for_15ep *
     { node:
-      { shutdown_on_slot_synced:        9000
-      }
+        { shutdown_on_slot_synced:        9000
+        }
       , analysis:
-      { filters:                        ["epoch3+", "size-small"] 
-      }
+        { filters:                        ["epoch3+", "size-small"] 
+        }
       , desc: "Small dataset, honest 15 epochs duration"
     }
     | .genesis.pparamsEpoch    =  timeline::lastKnownEpoch
     | .genesis.pparamsOverlays =  ["v8-preview"]
     ) as $plutuscall_base
+  |
+   ($plutuscall_base
+    | .genesis.pparamsOverlays =  ["v8-preview", "stepshalf"]
+    ) as $plutuscall_base_blockstepshalf
   |
    ($scenario_fixed_loaded * $triplet * $dataset_oct2021 *
     { node:
@@ -512,6 +516,15 @@ def all_profile_variants:
   , $plutus_base * $plutuscall_base * $double_tps_saturation_plutus * $plutus_loop_secp_schnorr *
     { name: "plutuscall-secp-schnorr"
     }
+  , $plutus_base * $plutuscall_base_blockstepshalf * $double_tps_saturation_plutus * $plutus_loop_counter *
+    { name: "plutuscall-loop-stepshalf"
+    }
+  , $plutus_base * $plutuscall_base_blockstepshalf * $double_tps_saturation_plutus * $plutus_loop_secp_ecdsa *
+    { name: "plutuscall-secp-ecdsa-stepshalf"
+    }
+  , $plutus_base * $plutuscall_base_blockstepshalf * $double_tps_saturation_plutus * $plutus_loop_secp_schnorr *
+    { name: "plutuscall-secp-schnorr-stepshalf"
+    }    
 
 ## Dish variants
   , $dish_base *
