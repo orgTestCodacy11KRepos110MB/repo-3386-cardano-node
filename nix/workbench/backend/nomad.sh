@@ -140,23 +140,32 @@ backend_nomad() {
       # Else a symlink to every tracer folder will be created inside trac_dir.
 
       # Create the "cluster" OCI image.
-      local oci_image_name=$(         envjqr 'oci_image_name')
-      local oci_image_tag=$(          envjqr 'oci_image_tag')
-      local oci_image_skopeo_script=$(envjqr 'oci_image_skopeo_script')
-      msg "Creating OCI image ..."
-      # TODO: for further research.
-      # STORAGE_DRIVER=overlay "$oci_image_skopeo_script"
-      # If podman 4.2.1 and nomad v1.3.5 this fix is not needed anymore
-      # Forced the `overlay` storage driver or podman won't see the image.
-      # https://docs.podman.io/en/latest/markdown/podman.1.html#note-unsupported-file-systems-in-rootless-mode
-      # Error was: workbench:  FATAL: OCI image registry.workbench.iog.io/cluster:2l7wi7sh1zyp2mnl24m13ibnh2wsjvwg cannot be found by podman
-      "$oci_image_skopeo_script"
-      # Check that `podman` can see the "cluster" OCI image.
-      if ! podman image exists "${oci_image_name}:${oci_image_tag}"
+      local oci_image_name=$(envjqr 'oci_image_name')
+      local oci_image_tag=$( envjqr 'oci_image_tag')
+      if podman image exists "${oci_image_name}:${oci_image_tag}"
       then
-        fatal "OCI image ${oci_image_name}:${oci_image_tag} cannot be found by podman"
+        msg "OCI image ${oci_image_name}:${oci_image_tag} is already available"
       else
-        msg "OCI image named \"${oci_image_name}:${oci_image_tag}\" created"
+        msg "Creating OCI image ..."
+        local oci_image_skopeo_script=$(envjqr 'oci_image_skopeo_script')
+        # TODO: for further research.
+        # STORAGE_DRIVER=overlay "$oci_image_skopeo_script"
+        # If podman 4.2.1 and nomad v1.3.5 this fix is not needed anymore
+        # Forced the `overlay` storage driver or podman won't see the image.
+        # https://docs.podman.io/en/latest/markdown/podman.1.html#note-unsupported-file-  systems-in-rootless-mode
+        # Error was: workbench:  FATAL: OCI image registry.workbench.iog.io/  cluster:2l7wi7sh1zyp2mnl24m13ibnh2wsjvwg cannot be found by podman
+        if ! "$oci_image_skopeo_script"
+        then
+          fatal "Creation of OCI image ${oci_image_name}:${oci_image_tag} failed"
+        else
+          # Now check that `podman` can see the "cluster" OCI image.
+          if ! podman image exists "${oci_image_name}:${oci_image_tag}"
+          then
+            fatal "OCI image ${oci_image_name}:${oci_image_tag} was created but cannot be found by podman"
+          else
+            msg "OCI image named \"${oci_image_name}:${oci_image_tag}\" created"
+          fi
+        fi
       fi
 
       # Create config files for Nomad and the Podman plugin/task driver.
