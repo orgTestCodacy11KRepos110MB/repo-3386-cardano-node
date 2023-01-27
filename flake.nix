@@ -316,7 +316,7 @@
                   roots.project = project.roots;
                   plan-nix.project = project.plan-nix;
                 };
-                variants = mapAttrs (_: v: removeAttrs v.musl ["variants"]) ciJobsVariants;
+                variants = mapAttrs (_: v: removeAttrs v.native ["variants"]) ciJobsVariants;
               };
             };
             nonRequiredPaths = [
