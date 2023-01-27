@@ -96,7 +96,7 @@ constraints:
   -- Needed until ouroboros-network gets proper bounds
   , byron-spec-chain == 0.1.1.1
   , byron-spec-ledger == 0.1.1.1
-  , cardano-binary == 1.5.0
+  , cardano-binary == 1.5.0.1
   , cardano-ledger-alonzo == 0.1.1.1
   , cardano-ledger-babbage == 0.1.1.1
   , cardano-ledger-byron == 0.1.1.1
@@ -159,7 +159,11 @@ source-repository-package
      ouroboros-consensus-cardano
      ouroboros-consensus-protocol
      ouroboros-consensus-shelley
+     ouroboros-consensus-diffusion
      ouroboros-network
+     ouroboros-network-api
+     ouroboros-network-mock
      ouroboros-network-framework
      ouroboros-network-testing
+     ouroboros-network-protocols
      ouroboros-consensus-cardano-tools

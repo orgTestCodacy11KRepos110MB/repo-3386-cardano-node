@@ -117,8 +117,11 @@ library
                       , ouroboros-consensus-byron
                       , ouroboros-consensus-cardano
                       , ouroboros-consensus-shelley
+                      , ouroboros-consensus-diffusion
                       , ouroboros-network
+                      , ouroboros-network-api
                       , ouroboros-network-framework
+                      , ouroboros-network-protocols
                       , plutus-ledger-api
                       , plutus-scripts-bench
                       , plutus-tx

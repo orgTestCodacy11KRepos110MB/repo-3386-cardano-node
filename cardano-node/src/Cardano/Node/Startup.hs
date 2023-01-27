@@ -38,10 +38,9 @@ import           Ouroboros.Consensus.Shelley.Ledger.Ledger (shelleyLedgerGenesis
 import           Ouroboros.Network.Magic (NetworkMagic (..))
 import           Ouroboros.Network.NodeToClient (LocalAddress (..), LocalSocket,
                    NodeToClientVersion)
-import           Ouroboros.Network.NodeToNode (DiffusionMode (..), NodeToNodeVersion)
+import           Ouroboros.Network.NodeToNode (DiffusionMode (..), NodeToNodeVersion, PeerAdvertise)
 import           Ouroboros.Network.PeerSelection.LedgerPeers (UseLedgerAfter (..))
 import           Ouroboros.Network.PeerSelection.RelayAccessPoint (RelayAccessPoint)
-import           Ouroboros.Network.PeerSelection.Types (PeerAdvertise)
 import           Ouroboros.Network.Subscription.Dns (DnsSubscriptionTarget (..))
 import           Ouroboros.Network.Subscription.Ip (IPSubscriptionTarget (..))
 

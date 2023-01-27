@@ -24,7 +24,7 @@ import           Ouroboros.Network.Protocol.Handshake.Type (Handshake)
 import           Ouroboros.Network.Protocol.Handshake.Version (acceptableVersion,
                    simpleSingletonVersions)
 import           Ouroboros.Network.Snocket (LocalAddress, LocalSocket, Snocket,
-                   localAddressFromPath, localSnocket)
+                   localAddressFromPath, localSnocket, makeLocalBearer)
 import           Ouroboros.Network.Socket (ConnectionId (..), connectToNode,
                    nullNetworkConnectTracers)
 import qualified System.Metrics.Configuration as EKGF
@@ -89,6 +89,7 @@ doConnectToForwarder
 doConnectToForwarder snocket address netMagic timeLimits app =
   connectToNode
     snocket
+    makeLocalBearer
     -- local sockets (e.g. unix sockets or named pipes on Windows), do
     -- not need any configuration; we only need to configure node-to-node sockets.
     mempty

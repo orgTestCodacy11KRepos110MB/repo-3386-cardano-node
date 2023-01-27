@@ -174,8 +174,11 @@ library
                       , ouroboros-consensus-cardano
                       , ouroboros-consensus-protocol
                       , ouroboros-consensus-shelley
+                      , ouroboros-consensus-diffusion
                       , ouroboros-network  ^>= 0.2
                       , ouroboros-network-framework ^>= 0.2
+                      , ouroboros-network-api
+                      , ouroboros-network-protocols
                       , psqueues
                       , safe-exceptions
                       , scientific
@@ -231,7 +234,9 @@ test-suite cardano-node-test
                       , hedgehog-corpus
                       , iproute
                       , ouroboros-consensus
+                      , ouroboros-consensus-diffusion
                       , ouroboros-network
+                      , ouroboros-network-api
                       , time
                       , vector
 

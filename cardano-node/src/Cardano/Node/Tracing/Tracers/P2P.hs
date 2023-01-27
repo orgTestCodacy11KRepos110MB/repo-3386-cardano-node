@@ -104,6 +104,8 @@ namesForLocalRootPeers TraceLocalRootDomains {} = ["LocalRootDomains"]
 namesForLocalRootPeers TraceLocalRootWaiting {} = ["LocalRootWaiting"]
 namesForLocalRootPeers TraceLocalRootResult {}  = ["LocalRootResult"]
 namesForLocalRootPeers TraceLocalRootGroups {}  = ["LocalRootGroups"]
+namesForLocalRootPeers TraceLocalRootReconfigured {}
+                                                = ["LocalRootReconfigured"]
 namesForLocalRootPeers TraceLocalRootFailure {} = ["LocalRootFailure"]
 namesForLocalRootPeers TraceLocalRootError {}   = ["LocalRootError"]
 
@@ -129,6 +131,11 @@ instance (ToJSONKey ntnAddr, ToJSONKey RelayAccessPoint, Show ntnAddr, Show exce
   forMachine _dtal (TraceLocalRootGroups groups) =
     mconcat [ "kind" .= String "LocalRootGroups"
              , "localRootGroups" .= toJSON groups
+             ]
+  forMachine _dtal (TraceLocalRootReconfigured old new) =
+    mconcat [ "kind" .= String "LocalRootReconfigured"
+             , "oldLocalRootGroups" .= toJSON old
+             , "newLocalRootGroups" .= toJSON new
              ]
   forMachine _dtal (TraceLocalRootFailure d exception) =
     mconcat [ "kind" .= String "LocalRootFailure"
@@ -238,8 +245,10 @@ namesForPeerSelection TraceTargetsChanged {}        = ["TargetsChanged"]
 namesForPeerSelection TracePublicRootsRequest {}    = ["PublicRootsRequest"]
 namesForPeerSelection TracePublicRootsResults {}    = ["PublicRootsResults"]
 namesForPeerSelection TracePublicRootsFailure {}    = ["PublicRootsFailure"]
-namesForPeerSelection TraceGossipRequests {}        = ["GossipRequests"]
-namesForPeerSelection TraceGossipResults {}         = ["GossipResults"]
+namesForPeerSelection TracePeerShareRequests {}     = ["PeerShareRequests"]
+namesForPeerSelection TracePeerShareResults {}      = ["PeerShareResults"]
+namesForPeerSelection TracePeerShareResultsFiltered {}
+                                                    = ["PeerShareResultsFiltered"]
 namesForPeerSelection TraceForgetColdPeers {}       = ["ForgetColdPeers"]
 namesForPeerSelection TracePromoteColdPeers {}      = ["PromoteColdPeers"]
 namesForPeerSelection TracePromoteColdLocalPeers {} = ["PromoteColdLocalPeers"]
