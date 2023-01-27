@@ -142,7 +142,8 @@ backend_nomad() {
         cp $(jq '."config"'               -r $trac) "$trac_dir"/config.json
         cp $(jq '."start"'                -r $trac) "$trac_dir"/start.sh
       fi
-      # Else a symlink to every tracer folder will be created inside trac_dir.
+      # Else a symlink to every tracer folder will be created inside trac_dir
+      # once the Nomad job is running (`wb backend start`).
 
       # Create the "cluster" OCI image.
       local oci_image_name=$(envjqr 'oci_image_name')
@@ -552,6 +553,7 @@ backend_nomad() {
       local task=${1:?$usage}; shift
       local service=${1:?$usage}; shift
 
+      # `status` returns false if any service is "EXITED" non-zero.
       backend_nomad task-supervisorctl "$dir" "$task" status "$service" > /dev/null && true
       ;;
 
