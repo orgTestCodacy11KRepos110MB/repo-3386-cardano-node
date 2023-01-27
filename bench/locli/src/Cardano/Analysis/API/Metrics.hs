@@ -140,15 +140,15 @@ instance TimelineFields SummaryOne where
       "Number of filters applied"
       ""
 
-   <> fScalar "cdfLogLinesEmitted"     W6  Cnt (IFloat $ cdfAverageVal.cdfLogLinesEmitted)
+   <> fScalar "cdfLogLinesEmitted"     Wno Cnt (IFloat $ cdfAverageVal.cdfLogLinesEmitted)
       "Log text lines emitted per host"
       ""
 
-   <> fScalar "cdfLogObjectsEmitted"   W6  Cnt (IFloat $ cdfAverageVal.cdfLogObjectsEmitted)
+   <> fScalar "cdfLogObjectsEmitted"   Wno Cnt (IFloat $ cdfAverageVal.cdfLogObjectsEmitted)
       "Log objects emitted per host"
       ""
 
-   <> fScalar "cdfLogObjects"          W6  Cnt (IFloat $ cdfAverageVal.cdfLogObjects)
+   <> fScalar "cdfLogObjects"          Wno Cnt (IFloat $ cdfAverageVal.cdfLogObjects)
       "Log objects analysed per host"
       ""
 
@@ -307,7 +307,7 @@ instance CDFFields BlockProp p where
       | (i, ct@(Centile centi)) <- zip [0::Int ..] adoptionCentiles
       ]
 
-   <> fBoth "cdfBlocksPerHost" "Host" "blks" W4 Blk P0 Lin Free (DInt cdfBlocksPerHost)
+   <> fBoth "cdfBlocksPerHost" "Host" "blks" Wno Blk P0 Lin Free (DInt cdfBlocksPerHost)
       "Blocks per host"
       "For a given host, number of blocks made during the entire observation period"
 
@@ -319,11 +319,11 @@ instance CDFFields BlockProp p where
       "Chained to forged block ratio"
       "For a given host, ratio of blocks that made into chain / all forged"
 
-   <> fBoth "cdfBlockBattles" "Battl" " #" W4 Blk P0 Lin Free (DInt cdfBlockBattles)
+   <> fBoth "cdfBlockBattles" "Battl" " #" Wno Blk P0 Lin Free (DInt cdfBlockBattles)
       "Height & slot battles"
       "For a given block, number of all abandoned blocks at its block height.  Sum of height and slot battles"
 
-   <> fBoth "cdfBlockSizes" "Size" "bytes" W9 B   P0 Lin Free (DInt cdfBlockSizes)
+   <> fBoth "cdfBlockSizes" "Size" "bytes" Wno B   P0 Lin Free (DInt cdfBlockSizes)
       "Block size"
       "Block size, in bytes"
    where r = nChunksEachOf (length adoptionCentiles) 5
@@ -346,9 +346,9 @@ instance TimelineFields BlockEvents where
    <> fBoth' "beBlock"     "block" "hash"  W6 Hsh P0 Lin Free (IText   (shortHash.beBlock))
    <> fBoth' "beBlockPrev" "prev"  "hash"  W6 Hsh P0 Lin Free (IText   (shortHash.beBlockPrev))
    <> fBoth' "bfForger"    "forger" "host" W7 Hos P0 Lin Free (IText   (ST.toText.unHost.bfForger . beForge))
-   <> fBoth' "bfBlockSize" "size"  "bytes" W6 B   P0 Lin Free (IInt    (bfBlockSize.beForge))
+   <> fBoth' "bfBlockSize" "size"  "bytes" Wno B   P0 Lin Free (IInt    (bfBlockSize.beForge))
    <> fBoth' "bfBlockGap"  "block" "gap"   W5 Len P0 Lin Free (IDeltaT (bfBlockGap .beForge))
-   <> fBoth' "bpeIsFork"   "for"  "-ks"    W3 Blk P0 Lin Free (IInt    (count bpeIsFork.beErrors))
+   <> fBoth' "bpeIsFork"   "for"  "-ks"    Wno Blk P0 Lin Free (IInt    (count bpeIsFork.beErrors))
    <> fGrp "--------- Forger event Δt: ---------"
             W4 Sec P3 Log Free
     [ fGrp' "bfStarted"     "Start"  (IDeltaT (bfStarted  .beForge)) "" ""
@@ -379,8 +379,8 @@ instance TimelineFields BlockEvents where
     ]
    <> fBoth' "beAcceptance" "va-" "lid" W3 Sig P0 Lin Free (IText (bool "-" "+" . (== 0) . length
                                                           . filter (not . snd) . beAcceptance))
-   <> fBoth' "valids"     "good" "obsv" W3 Ev  P0 Lin Free (IInt  (length.valids))
-   <> fBoth' "beErrors"   "all"  "errs" W5 Ev  P0 Lin Free (IInt  (length.beErrors))
+   <> fBoth' "valids"     "good" "obsv" Wno Ev  P0 Lin Free (IInt  (length.valids))
+   <> fBoth' "beErrors"   "all"  "errs" Wno Ev  P0 Lin Free (IInt  (length.beErrors))
 
    <> fGrp "Missing"
             W3 Ev P0 Lin Free
@@ -531,7 +531,7 @@ instance CDFFields MachPerf p where
       "Number of bytes which this process caused to be sent to the storage layer, modulo truncate(), per second"
     ]
 
-   <> fGrp  "CPU% spans"                W5 Len P0 Lin Free
+   <> fGrp  "CPU% spans"                Wno Len P0 Lin Free
     [ fGrp' "cdfSpanLensCpu"        "All" (DInt cdfSpanLensCpu)
       "CPU 85% spans"
       "Length of over-85% CPU usage peaks"
