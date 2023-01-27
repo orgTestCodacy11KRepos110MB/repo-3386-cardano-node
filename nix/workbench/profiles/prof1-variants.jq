@@ -191,8 +191,8 @@ def all_profile_variants:
     ) as $for_4ep
   |
     ({} |
-     .generator.epochs                = 12
-    ) as $for_12ep
+     .generator.epochs                = 15
+    ) as $for_15ep
   |
     ({}
      | .node.shutdown_on_block_synced   = 1
@@ -355,14 +355,17 @@ def all_profile_variants:
     { desc: "Miniature dataset, CI-friendly duration, bench scale"
     }) as $cibench_base
   |
-   ($scenario_fixed_loaded * $dataset_small * $for_12ep *
+   ($scenario_fixed_loaded * $dataset_small * $for_15ep *
     { node:
-      { shutdown_on_slot_synced:        7200
+      { shutdown_on_slot_synced:        9000
       }
-      , desc: "Small dataset, honest 12 epochs duration"
+      , analysis:
+      { filters:                        ["epoch3+", "size-small"] 
+      }
+      , desc: "Small dataset, honest 15 epochs duration"
     }
-    | .genesis.pparamsEpoch    = timeline::lastKnownEpoch
-    | .genesis.pparamsOverlays = ["v8-preview"]
+    | .genesis.pparamsEpoch    =  timeline::lastKnownEpoch
+    | .genesis.pparamsOverlays =  ["v8-preview"]
     ) as $plutuscall_base
   |
    ($scenario_fixed_loaded * $triplet * $dataset_oct2021 *
@@ -499,14 +502,14 @@ def all_profile_variants:
     { name: "ci-test-dense10"
     }
 
-  ## Plutus call variants: 12 epochs
-  , $plutuscall_base * $plutus_base * $double_tps_saturation_plutus * $plutus_loop_counter *
+  ## Plutus call variants: 15 epochs
+  , $plutus_base * $plutuscall_base * $double_tps_saturation_plutus * $plutus_loop_counter *
     { name: "plutuscall-loop"
     }
-  , $plutuscall_base * $plutus_base * $double_tps_saturation_plutus * $plutus_loop_secp_ecdsa *
+  , $plutus_base * $plutuscall_base * $double_tps_saturation_plutus * $plutus_loop_secp_ecdsa *
     { name: "plutuscall-secp-ecdsa"
     }
-  , $plutuscall_base * $plutus_base * $double_tps_saturation_plutus * $plutus_loop_secp_schnorr *
+  , $plutus_base * $plutuscall_base * $double_tps_saturation_plutus * $plutus_loop_secp_schnorr *
     { name: "plutuscall-secp-schnorr"
     }
 
