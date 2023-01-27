@@ -360,7 +360,7 @@ def all_profile_variants:
         { shutdown_on_slot_synced:        9000
         }
       , analysis:
-        { filters:                        ["epoch3+", "size-small"] 
+        { filters:                        ["epoch3+", "size-moderate"] 
         }
       , desc: "Small dataset, honest 15 epochs duration"
     }
