@@ -268,8 +268,6 @@ def all_profile_variants:
       }
     }
     | .generator.tx_fee        = 1025000
-    | .genesis.pparamsEpoch    = timeline::lastKnownEpoch
-    | .genesis.pparamsOverlays = ["v8-preview"]
     ) as $plutus_loop_secp_ecdsa
   |
    ({ generator:
@@ -293,13 +291,19 @@ def all_profile_variants:
       }
     }
     | .generator.tx_fee        = 1020000
-    | .genesis.pparamsEpoch    = timeline::lastKnownEpoch
-    | .genesis.pparamsOverlays = ["v8-preview"]
     ) as $plutus_loop_secp_schnorr
+  ##
+  ### Definition vocabulary:  genesis variants
+  ##
   |
+    ({}
+      | .genesis.pparamsEpoch         = timeline::lastKnownEpoch
+      | .genesis.pparamsOverlays      = ["v8-preview"]
+    ) as $costmodel_v8_preview
   ##
   ### Definition vocabulary:  node config variants
   ##
+  |
     ({ extra_desc:                     "without cardano-tracer"
      , suffix:                         "notracer"
      }|
@@ -363,13 +367,10 @@ def all_profile_variants:
         { filters:                        ["epoch3+", "size-moderate"] 
         }
       , desc: "Small dataset, honest 15 epochs duration"
-    }
-    | .genesis.pparamsEpoch    =  timeline::lastKnownEpoch
-    | .genesis.pparamsOverlays =  ["v8-preview"]
-    ) as $plutuscall_base
+    }) as $plutuscall_base
   |
    ($plutuscall_base
-    | .genesis.pparamsOverlays =  ["v8-preview", "stepshalf"]
+    | .genesis.pparamsOverlays          += ["stepshalf"]
     ) as $plutuscall_base_blockstepshalf
   |
    ($scenario_fixed_loaded * $triplet * $dataset_oct2021 *
@@ -425,15 +426,15 @@ def all_profile_variants:
   , { name: "default"
     , desc: "Default, as per nix/workbench/profiles/defaults.jq"
     }
-  , $plutus_base * $plutus_loop_counter *
+  , $plutus_base * $costmodel_v8_preview * $plutus_loop_counter *
     { name: "plutus"
     , desc: "Default with Plutus workload: CPU/memory limit saturation counter loop"
     }
-  , $plutus_base * $plutus_loop_secp_ecdsa *
+  , $plutus_base * $costmodel_v8_preview * $plutus_loop_secp_ecdsa *
     { name: "plutus-secp-ecdsa"
     , desc: "Default with Plutus workload: CPU/memory limit saturation ECDSA SECP256k1 loop"
     }
-  , $plutus_base * $plutus_loop_secp_schnorr *
+  , $plutus_base * $costmodel_v8_preview * $plutus_loop_secp_schnorr *
     { name: "plutus-secp-schnorr"
     , desc: "Default with Plutus workload: CPU/memory limit saturation Schnorr SECP256k1 loop"
     }
@@ -488,13 +489,13 @@ def all_profile_variants:
   , $cibench_base * $p2p *
     { name: "ci-bench-p2p"
     }
-  , $cibench_base * $plutus_base * $plutus_loop_counter *
+  , $cibench_base * $plutus_base * $costmodel_v8_preview * $plutus_loop_counter *
     { name: "ci-bench-plutus"
     }
-  , $cibench_base * $plutus_base * $plutus_loop_secp_ecdsa *
+  , $cibench_base * $plutus_base * $costmodel_v8_preview * $plutus_loop_secp_ecdsa *
     { name: "ci-bench-plutus-secp-ecdsa"
     }
-  , $cibench_base * $plutus_base * $plutus_loop_secp_schnorr *
+  , $cibench_base * $plutus_base * $costmodel_v8_preview * $plutus_loop_secp_schnorr *
     { name: "ci-bench-plutus-secp-schnorr"
     }
   , $cibench_base * $without_tracer *
@@ -507,22 +508,22 @@ def all_profile_variants:
     }
 
   ## Plutus call variants: 15 epochs
-  , $plutus_base * $plutuscall_base * $double_tps_saturation_plutus * $plutus_loop_counter *
+  , $plutus_base * $costmodel_v8_preview * $plutuscall_base * $double_tps_saturation_plutus * $plutus_loop_counter *
     { name: "plutuscall-loop"
     }
-  , $plutus_base * $plutuscall_base * $double_tps_saturation_plutus * $plutus_loop_secp_ecdsa *
+  , $plutus_base * $costmodel_v8_preview * $plutuscall_base * $double_tps_saturation_plutus * $plutus_loop_secp_ecdsa *
     { name: "plutuscall-secp-ecdsa"
     }
-  , $plutus_base * $plutuscall_base * $double_tps_saturation_plutus * $plutus_loop_secp_schnorr *
+  , $plutus_base * $costmodel_v8_preview * $plutuscall_base * $double_tps_saturation_plutus * $plutus_loop_secp_schnorr *
     { name: "plutuscall-secp-schnorr"
     }
-  , $plutus_base * $plutuscall_base_blockstepshalf * $double_tps_saturation_plutus * $plutus_loop_counter *
+  , $plutus_base * $costmodel_v8_preview * $plutuscall_base_blockstepshalf * $double_tps_saturation_plutus * $plutus_loop_counter *
     { name: "plutuscall-loop-stepshalf"
     }
-  , $plutus_base * $plutuscall_base_blockstepshalf * $double_tps_saturation_plutus * $plutus_loop_secp_ecdsa *
+  , $plutus_base * $costmodel_v8_preview * $plutuscall_base_blockstepshalf * $double_tps_saturation_plutus * $plutus_loop_secp_ecdsa *
     { name: "plutuscall-secp-ecdsa-stepshalf"
     }
-  , $plutus_base * $plutuscall_base_blockstepshalf * $double_tps_saturation_plutus * $plutus_loop_secp_schnorr *
+  , $plutus_base * $costmodel_v8_preview * $plutuscall_base_blockstepshalf * $double_tps_saturation_plutus * $plutus_loop_secp_schnorr *
     { name: "plutuscall-secp-schnorr-stepshalf"
     }    
 
