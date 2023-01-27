@@ -426,7 +426,24 @@ backend_nomad() {
       local nomad_job_name=$(envjqr 'nomad_job_name')
 
       # Stop generator.
-      backend_nomad task-service-stop "$dir" node-0 generator || true
+      # If the node already quit (due to --shutdown_on_slot_synced X or
+      # --shutdown_on_block_synced X) the generator also quits.
+      local generator_can_quit=$(jq ".\"node-0\".shutdown_on_slot_synced or .\"node-0\".shutdown_on_block_synced" "$dir"/node-specs.json)
+      if test "$generator_can_quit" = "false"
+      then
+        if ! backend_nomad task-service-stop "$dir" node-0 generator
+        then
+          # Do not fail here, because nobody will be able to stop the cluster!
+          msg "FATAL: generator quit (un)expectedly"
+        fi
+      else
+        if backend_nomad is-task-service-running "$dir" node-0 generator
+        then
+          # The `|| true` is to avoid a race condition were we try to stop
+          # the generator just after it quits automatically.
+          backend_nomad task-service-stop "$dir" node-0 generator 2>&1 >/dev/null || true
+        fi
+      fi
       # Stop tracer(s).
       local one_tracer_per_node=$(envjq 'one_tracer_per_node')
       if jqtest ".node.tracer" "$dir"/profile.json
@@ -436,16 +453,35 @@ backend_nomad() {
           local nodes=($(jq_tolist keys "$dir"/node-specs.json))
           for node in ${nodes[*]}
           do
-            backend_nomad task-service-stop "$dir" "$node" tracer || true
+            # Tracers that receive connections should never quit by itself.
+            backend_nomad task-service-stop "$dir" "$node" tracer
           done
         else
-          backend_nomad task-service-stop "$dir" tracer tracer || true
+          # Tracers that receive connections should never quit by itself.
+          backend_nomad task-service-stop "$dir" tracer tracer
         fi
       fi
       # Stop nodes.
       for node in $(jq_tolist 'keys' "$dir"/node-specs.json)
       do
-        backend_nomad task-service-stop "$dir" "$node" "$node" || true
+        # Node may have already quit (due to --shutdown_on_slot_synced X or
+        # --shutdown_on_block_synced X).
+        local node_can_quit=$(jq ".\"$node\".shutdown_on_slot_synced or .\"$node\".shutdown_on_block_synced" "$dir"/node-specs.json)
+        if test "$node_can_quit" = "false"
+        then
+          if ! backend_nomad task-service-stop "$dir" "$node" "$node"
+          then
+            # Do not fail here, because nobody will be able to stop the cluster!
+            msg "FATAL: $node quit unexpectedly"
+          fi
+        else
+          if backend_nomad is-task-service-running "$dir" "$node" "$node"
+          then
+            # The `|| true` is to avoid a race condition were we try to stop
+            # the node just after it quits automatically.
+            backend_nomad task-service-stop "$dir" "$node" "$node" 2>&1 >/dev/null || true
+          fi
+        fi
       done
 
       msg "Stopping nomad job ..."
