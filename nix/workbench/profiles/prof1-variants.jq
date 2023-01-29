@@ -300,6 +300,11 @@ def all_profile_variants:
       | .genesis.pparamsEpoch         = timeline::lastKnownEpoch
       | .genesis.pparamsOverlays      = ["v8-preview"]
     ) as $costmodel_v8_preview
+  |
+    ({}
+      | .genesis.pparamsEpoch         = timeline::lastKnownEpoch
+      | .genesis.pparamsOverlays      = ["v8-preview", "stepshalf"]
+    ) as $costmodel_v8_preview_stepshalf
   ##
   ### Definition vocabulary:  node config variants
   ##
@@ -368,10 +373,6 @@ def all_profile_variants:
         }
       , desc: "Small dataset, honest 15 epochs duration"
     }) as $plutuscall_base
-  |
-   ($plutuscall_base
-    | .genesis.pparamsOverlays          += ["stepshalf"]
-    ) as $plutuscall_base_blockstepshalf
   |
    ($scenario_fixed_loaded * $triplet * $dataset_oct2021 *
     { node:
@@ -517,13 +518,13 @@ def all_profile_variants:
   , $plutus_base * $costmodel_v8_preview * $plutuscall_base * $double_tps_saturation_plutus * $plutus_loop_secp_schnorr *
     { name: "plutuscall-secp-schnorr"
     }
-  , $plutus_base * $costmodel_v8_preview * $plutuscall_base_blockstepshalf * $double_tps_saturation_plutus * $plutus_loop_counter *
+  , $plutus_base * $costmodel_v8_preview_stepshalf * $plutuscall_base * $double_tps_saturation_plutus * $plutus_loop_counter *
     { name: "plutuscall-loop-stepshalf"
     }
-  , $plutus_base * $costmodel_v8_preview * $plutuscall_base_blockstepshalf * $double_tps_saturation_plutus * $plutus_loop_secp_ecdsa *
+  , $plutus_base * $costmodel_v8_preview_stepshalf * $plutuscall_base * $double_tps_saturation_plutus * $plutus_loop_secp_ecdsa *
     { name: "plutuscall-secp-ecdsa-stepshalf"
     }
-  , $plutus_base * $costmodel_v8_preview * $plutuscall_base_blockstepshalf * $double_tps_saturation_plutus * $plutus_loop_secp_schnorr *
+  , $plutus_base * $costmodel_v8_preview_stepshalf * $plutuscall_base * $double_tps_saturation_plutus * $plutus_loop_secp_schnorr *
     { name: "plutuscall-secp-schnorr-stepshalf"
     }    
 
