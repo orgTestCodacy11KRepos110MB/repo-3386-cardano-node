@@ -32,7 +32,6 @@ import           Cardano.Prelude hiding (Show, show)
 import           Data.Aeson (Value (String), (.=))
 import           Data.Text (pack)
 import           Network.TypedProtocol.Codec (AnyMessageAndAgency (..))
-import           Text.Show
 
 import           Cardano.Slotting.Slot (SlotNo)
 

@@ -27,8 +27,7 @@ flag systemd
 common project-config
   default-language:     Haskell2010
 
-  default-extensions:   NoImplicitPrelude
-                        OverloadedStrings
+  default-extensions:   OverloadedStrings
   build-depends:        base >= 4.14 && < 4.15
 
   ghc-options:          -Wall
@@ -165,6 +164,7 @@ library
                       , lobemo-backend-ekg
                       , lobemo-backend-monitoring
                       , lobemo-backend-trace-forwarder
+                      , mtl
                       , network
                       , network-mux ^>= 0.2
                       , nothunks
@@ -230,9 +230,12 @@ test-suite cardano-node-test
                       , hedgehog
                       , hedgehog-corpus
                       , iproute
+                      , mtl
                       , ouroboros-consensus
                       , ouroboros-network
+                      , text
                       , time
+                      , transformers
                       , vector
 
   other-modules:        Test.Cardano.Node.FilePermissions

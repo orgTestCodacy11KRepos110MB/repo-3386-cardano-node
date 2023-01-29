@@ -41,7 +41,6 @@ import           Data.Aeson (Value (String), (.=))
 import qualified Data.IP as IP
 import           Data.Text (pack)
 import qualified Network.Socket as Socket
-import           Text.Show
 
 import qualified Ouroboros.Network.NodeToClient as NtC
 import           Ouroboros.Network.NodeToNode (ErrorPolicyTrace (..), WithAddr (..))
@@ -162,7 +161,7 @@ instance LogFormatting (WithIPList (SubscriptionTrace Socket.SockAddr)) where
                   <> "."
 
 docIPSubscription :: Documented (WithIPList (SubscriptionTrace Socket.SockAddr))
-docIPSubscription = Documented $ map withIPList (undoc docSubscription)
+docIPSubscription = Documented $ withIPList <$> undoc docSubscription
   where
     withIPList (DocMsg v nl comment) =
       DocMsg
@@ -221,7 +220,7 @@ instance LogFormatting (WithDomainName (SubscriptionTrace Socket.SockAddr)) wher
                   <> "."
 
 docDNSSubscription :: Documented (WithDomainName (SubscriptionTrace Socket.SockAddr))
-docDNSSubscription = Documented $ map withDomainName (undoc docSubscription)
+docDNSSubscription = Documented $ withDomainName <$> undoc docSubscription
   where
     withDomainName (DocMsg v nl comment) =
       DocMsg

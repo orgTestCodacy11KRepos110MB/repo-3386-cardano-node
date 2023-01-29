@@ -81,13 +81,16 @@ module Cardano.Node.Tracing.Tracers.Consensus
 
 import           Control.Monad.Class.MonadTime (Time (..))
 import           Data.Aeson (ToJSON, Value (Number, String), toJSON, (.=))
+import qualified Data.Aeson as Aeson
+import           Data.Foldable (Foldable (..))
+import           Data.Int (Int64)
 import           Data.IntPSQ (IntPSQ)
 import qualified Data.IntPSQ as Pq
 import           Data.SOP.Strict
+import           Data.Text (Text)
 import qualified Data.Text as Text
 import           Data.Time (DiffTime, NominalDiffTime)
-import           Text.Show
-
+import           Data.Word (Word32, Word64)
 
 import           Cardano.Slotting.Slot (WithOrigin (..))
 
@@ -100,7 +103,6 @@ import           Cardano.Node.Tracing.Render
 import           Cardano.Node.Tracing.Tracers.ConsensusStartupException
 import           Cardano.Node.Tracing.Tracers.ForgingThreadStats (ForgingStats)
 import           Cardano.Node.Tracing.Tracers.StartLeadershipCheck
-import           Cardano.Prelude hiding (All, Show, show)
 
 import           Cardano.Protocol.TPraos.OCert (KESPeriod (..))
 
@@ -115,7 +117,6 @@ import           Ouroboros.Network.KeepAlive (TraceKeepAliveClient (..))
 import           Ouroboros.Network.TxSubmission.Inbound hiding (txId)
 import           Ouroboros.Network.TxSubmission.Outbound
 
-import qualified Data.Aeson as Aeson
 import           Ouroboros.Consensus.Block
 import           Ouroboros.Consensus.BlockchainTime (SystemStart (..))
 import           Ouroboros.Consensus.BlockchainTime.WallClock.Util (TraceBlockchainTimeEvent (..))
