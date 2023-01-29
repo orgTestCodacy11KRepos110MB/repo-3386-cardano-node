@@ -16,7 +16,7 @@ index-state: 2023-01-20T05:50:56Z
 
 index-state:
   , hackage.haskell.org 2023-01-20T05:50:56Z
-  , cardano-haskell-packages 2022-12-14T00:40:15Z
+  , cardano-haskell-packages 2023-01-09T00:40:15Z
 
 packages:
     cardano-api
@@ -153,6 +153,7 @@ source-repository-package
    tag: d51b99d6677150c01ee411c30f1fb2ebf561fbcc
    --sha256: 1w9g3ybfp8fkajrcb7dxzsqhdadiycfbr4zndyfqs6dsqplfm8fa
    subdir:
+     cardano-ping
      monoidal-synchronisation
      network-mux
      ouroboros-consensus

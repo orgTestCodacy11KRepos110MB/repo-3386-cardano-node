@@ -56,7 +56,7 @@ import           Ouroboros.Network.Protocol.BlockFetch.Type (BlockFetch (..), Me
 import           Ouroboros.Network.Protocol.ChainSync.Type as ChainSync
 import qualified Ouroboros.Network.Protocol.TxSubmission2.Type as STX
 import qualified Ouroboros.Network.Protocol.TxSubmission2.Type as TXS
-import Ouroboros.Network.SizeInBytes (SizeInBytes(..))
+import           Ouroboros.Network.SizeInBytes (SizeInBytes (..))
 
 --------------------------------------------------------------------------------
 -- ChainSync Tracer

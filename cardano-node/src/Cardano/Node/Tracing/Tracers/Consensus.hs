@@ -135,7 +135,7 @@ import           Ouroboros.Consensus.Node.Run (SerialiseNodeToNodeConstraints, e
 import           Ouroboros.Consensus.Node.Tracers
 import qualified Ouroboros.Consensus.Protocol.Ledger.HotKey as HotKey
 import           Ouroboros.Consensus.Util.Enclose
-import Ouroboros.Network.SizeInBytes (SizeInBytes(..))
+import           Ouroboros.Network.SizeInBytes (SizeInBytes (..))
 
 
 instance LogFormatting a => LogFormatting (TraceLabelCreds a) where
