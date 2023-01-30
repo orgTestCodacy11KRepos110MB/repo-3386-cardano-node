@@ -61,39 +61,47 @@ backend_nomad() {
       local profile_dir=${1:?$usage}
 
       # The output files of the profiles Nix derivation:
-      ## The one provided by the profile, the one used may suffer changes (jq).
+      ## The profile Nomad job file, the one finally used suffers changes (jq).
       local profile_nomad_job_file="$profile_dir"/nomad-job.json
       setenvjqstr 'profile_nomad_job_file' "$profile_nomad_job_file"
-      ## Look up `cluster` OCI image's name and tag (also Nix profile).
+      ## The profile OCI images for the podman task driver (nomad-driver-podman)
+      ### Look up `cluster` OCI image's name and tag (also Nix profile).
       setenvjqstr 'oci_image_name' ${WB_OCI_IMAGE_NAME:-$(jq -r '. ["clusterNode"]["imageName"]' "$profile_dir"/oci-images.json)}
       setenvjqstr 'oci_image_tag'  ${WB_OCI_IMAGE_TAG:-$(jq -r '. ["clusterNode"]["imageTag"]' "$profile_dir"/oci-images.json)}
-      ## Script that creates the OCI image from nix2container layered output.
+      ### Script that creates the OCI image from nix2container layered output.
       setenvjqstr 'oci_image_skopeo_script' $(jq -r '. ["clusterNode"]["copyToPodman"]' "$profile_dir"/oci-images.json)
 
-      # Fetch all the default values that are inside the meta stanza:
+      # Fetch all the default values that are inside the Nomad job JSON file.
+      # Some are provided in meta stanza to make it easier to fetch them:
       ## Get the job and group name from the job's JSON description.
-      local nomad_job_name=$(jq -r '. ["job"] | keys[0]' "$profile_nomad_job_file")
-      setenvjqstr 'nomad_job_name' "$nomad_job_name"
-      local nomad_job_group_name=$(jq -r ". [\"job\"][\"$nomad_job_name\"][\"group\"] | keys[0]" "$profile_nomad_job_file")
-      setenvjqstr 'nomad_job_group_name' "$nomad_job_group_name"
+      ## The names of the job or groups may be renamed to avoid conflicts
+      ## between Nomad jobs runs!
+      local profile_nomad_job_name=$(jq -r '. ["job"] | keys[0]' "$profile_nomad_job_file")
+      setenvjqstr 'profile_nomad_job_name' "$profile_nomad_job_name"
+      local profile_nomad_job_group_name=$(jq -r ". [\"job\"][\"$profile_nomad_job_name\"][\"group\"] | keys[0]" "$profile_nomad_job_file")
+      setenvjqstr 'profile_nomad_job_group_name' "$profile_nomad_job_group_name"
       ## The workbench is expecting an specific hierarchy of folders and files.
-      setenvjqstr 'container_workdir' $(jq -r ". [\"job\"][\"$nomad_job_name\"][\"group\"][\"$nomad_job_group_name\"][\"meta\"][\"WORKING_DIRECTORY\"]" "$profile_nomad_job_file")
-      setenvjqstr 'container_mountpoint' $(jq -r ". [\"job\"][\"$nomad_job_name\"][\"group\"][\"$nomad_job_group_name\"][\"meta\"][\"STATE_DIRECTORY\"]" "$profile_nomad_job_file")
-      ## The `supervisord` binary is installed inside the container but not
+      setenvjqstr 'container_workdir' $(jq -r ". [\"job\"][\"$profile_nomad_job_name\"][\"group\"][\"$profile_nomad_job_group_name\"][\"meta\"][\"WORKING_DIRECTORY\"]" "$profile_nomad_job_file")
+      setenvjqstr 'container_mountpoint' $(jq -r ". [\"job\"][\"$profile_nomad_job_name\"][\"group\"][\"$profile_nomad_job_group_name\"][\"meta\"][\"STATE_DIRECTORY\"]" "$profile_nomad_job_file")
+      ## The `supervisord` binary is nix-installed inside the container but not
       ## added to $PATH (resides in /nix/store), so a desired location is
-      ## passed to the container as an environment variable to create a symlink
-      ## to it.
-      setenvjqstr 'container_supervisor_nix' $(jq -r ". [\"job\"][\"$nomad_job_name\"][\"group\"][\"$nomad_job_group_name\"][\"meta\"][\"SUPERVISOR_NIX\"]" "$profile_nomad_job_file")
+      ## passed to the container's entrypoint as an environment variable to
+      ## create a known symlink to it.
+      setenvjqstr 'container_supervisor_nix' $(jq -r ". [\"job\"][\"$profile_nomad_job_name\"][\"group\"][\"$profile_nomad_job_group_name\"][\"meta\"][\"SUPERVISOR_NIX\"]" "$profile_nomad_job_file")
       ## The `--serverurl` argument is needed in every call to `nomad exec`.
-      setenvjqstr 'container_supervisord_url' $(jq -r ". [\"job\"][\"$nomad_job_name\"][\"group\"][\"$nomad_job_group_name\"][\"meta\"][\"SUPERVISORD_URL\"]" "$profile_nomad_job_file")
+      ## Uusually a socket/file decided between the container and the Job file.
+      setenvjqstr 'container_supervisord_url' $(jq -r ". [\"job\"][\"$profile_nomad_job_name\"][\"group\"][\"$profile_nomad_job_group_name\"][\"meta\"][\"SUPERVISORD_URL\"]" "$profile_nomad_job_file")
       ## The container needs to know where the `supervisord` config file is
-      ## located so it can be started. This is passed as an environment var.
-      setenvjqstr 'container_supervisord_conf' $(jq -r ". [\"job\"][\"$nomad_job_name\"][\"group\"][\"$nomad_job_group_name\"][\"meta\"][\"SUPERVISORD_CONFIG\"]" "$profile_nomad_job_file")
+      ## located so it can be started. Also passed as an environment var.
+      setenvjqstr 'container_supervisord_conf' $(jq -r ". [\"job\"][\"$profile_nomad_job_name\"][\"group\"][\"$profile_nomad_job_group_name\"][\"meta\"][\"SUPERVISORD_CONFIG\"]" "$profile_nomad_job_file")
       ## The logging level at which supervisor should write to the activity
       ## log. Valid levels are trace, debug, info, warn, error and critical.
-      setenvjqstr 'container_supervisord_loglevel' $(jq -r ". [\"job\"][\"$nomad_job_name\"][\"group\"][\"$nomad_job_group_name\"][\"meta\"][\"SUPERVISORD_LOGLEVEL\"]" "$profile_nomad_job_file")
+      setenvjqstr 'container_supervisord_loglevel' $(jq -r ". [\"job\"][\"$profile_nomad_job_name\"][\"group\"][\"$profile_nomad_job_group_name\"][\"meta\"][\"SUPERVISORD_LOGLEVEL\"]" "$profile_nomad_job_file")
       ## One tracer for all or one tracer per node?
-      setenvjq    'one_tracer_per_node' $(jq ". [\"job\"][\"$nomad_job_name\"][\"group\"][\"$nomad_job_group_name\"][\"meta\"][\"ONE_TRACER_PER_NODE\"]" "$profile_nomad_job_file")
+      ## The Job file is created for one of these two modes available.
+      setenvjq    'one_tracer_per_node' $(jq ". [\"job\"][\"$profile_nomad_job_name\"][\"group\"][\"$profile_nomad_job_group_name\"][\"meta\"][\"ONE_TRACER_PER_NODE\"]" "$profile_nomad_job_file")
+      ##  The configured network mode (Actually only "host" or "bridge").
+      setenvjq    'profile_nomad_job_group_network_mode' $(jq ". [\"job\"][\"$profile_nomad_job_name\"][\"group\"][\"$profile_nomad_job_group_name\"][\"network\"][\"mode\"]" "$profile_nomad_job_file")
       ;;
 
     # Man pages for Podman configuration files:
@@ -174,9 +182,20 @@ backend_nomad() {
         fi
       fi
 
-      # Create the Nomad job file.
+      # Edit the Nomad job file to suit the current environment (actually only
+      # local, TODO cloud).
+      # It needs to mount the tracer directory if "one_tracer_per_node" is true,
+      # mount the genesis and CARDANO_MAINNET_MIRROR (if needed).
       mkdir -p "${dir}"/nomad
       nomad_create_job_file "${dir}"
+
+      # Change the Nomad job name to the current run tag. This allows to run
+      # multiple clusters simulatenously (as long as the network isolation mode
+      # and/or topology.json allows no port clashing)
+      local nomad_job_name=$(basename "${dir}")
+      local profile_nomad_job_name=$(envjqr 'profile_nomad_job_name')
+      jq ".[\"job\"][\"${nomad_job_name}\"] = .[\"job\"][\"${profile_nomad_job_name}\"] | del(.[\"job\"][\"${profile_nomad_job_name}\"])" "${dir}"/nomad/nomad-job.json | sponge "${dir}"/nomad/nomad-job.json
+      setenvjqstr 'nomad_job_name' "$nomad_job_name"
       ;;
 
     describe-run )
@@ -256,13 +275,18 @@ backend_nomad() {
       local dir=${1:?$usage}; shift
       local one_tracer_per_node=$(envjq 'one_tracer_per_node')
 
-      # TODO: Reuse an already running cardano-workbench Nomad server!
-      # Create config files for Nomad and the Podman plugin/task driver.
-      backend_nomad nomad-server-configure
-      # Start the `nomad-driver-podman` API service.
-      backend_nomad nomad-driver-podman-start
-      # Start Nomad!
-      backend_nomad nomad-server-start
+      # Reuse an already running cardano-workbench Nomad server!
+      if backend_nomad nomad-server-pid >/dev/null
+      then
+        setenvjqstr 'nomad_server_was_already_running' "true"
+        msg "Reusing already up and running Nomad server"
+      else
+        setenvjqstr 'nomad_server_was_already_running' "false"
+        # Create config files for Nomad and the Podman plugin/task driver.
+        backend_nomad nomad-server-configure
+        # Start server, client and plugins.
+        backend_nomad nomad-agents-start
+      fi
       ln -s "$nomad_server_dir"/nomad.log "$dir"/nomad/server.log
       ln -s "$nomad_server_dir"/stdout "$dir"/nomad/server.stdout
       ln -s "$nomad_server_dir"/stderr "$dir"/nomad/server.stderr
@@ -505,8 +529,14 @@ backend_nomad() {
       # {"@level":"debug","@message":"Could not get container stats, unknown error","@module":"podman.podmanHandle","@timestamp":"2022-12-14T14:34:16.320494Z","driver":"podman","error":"\u0026url.Error{Op:\"Get\", URL:\"http://u/v1.0.0/libpod/containers/a55f689be4d2898225c76fa12716cfa0c0dedd54a1919e82d44523a35b8d07a4/stats?stream=false\", Err:(*net.OpError)(0xc000ba5220)}","timestamp":"2022-12-14T14:34:16.320Z"}
       nomad job stop -global -no-shutdown-delay -purge -yes -verbose "$nomad_job_name" >> "$dir/nomad/job.stdout" 2>> "$dir/nomad/job.stderr"
 
-      backend_nomad nomad-server-stop
-      backend_nomad nomad-driver-podman-stop
+      local nomad_server_was_already_running=$(envjqr 'nomad_server_was_already_running')
+      if test "$nomad_server_was_already_running" = "false"
+      then
+        backend_nomad nomad-agents-stop
+      fi
+
+      local nomad_job_name=$(envjqr 'oci_image_was_already_available')
+      #TODO: Remove it?
       ;;
 
     cleanup-cluster )
@@ -573,6 +603,16 @@ backend_nomad() {
     ## Nomad server/agent subcommands
     #################################
 
+    nomad-agents-start )
+      backend_nomad nomad-driver-podman-start
+      backend_nomad nomad-server-start
+    ;;
+
+    nomad-agents-stop )
+      backend_nomad nomad-server-stop
+      backend_nomad nomad-driver-podman-stop
+    ;;
+
     nomad-server-config-file )
       echo "$nomad_server_dir"/config/nomad.hcl
     ;;
@@ -599,6 +639,7 @@ backend_nomad() {
         ### https://www.nomadproject.io/plugins/drivers/podman#client-requirements
         ## On every call to `wb backend pass nomad-server-configure` the
         ## available `nomad-driver-podman` is replaced.
+        rm  -f "${nomad_server_dir}"/data/plugins/nomad-driver-podman
         ln -s -f "$(which nomad-driver-podman)" "${nomad_server_dir}"/data/plugins/nomad-driver-podman
         nomad_create_server_config "${nomad_server_config_file}" "${podman_socket_path}"
       fi
@@ -614,8 +655,6 @@ backend_nomad() {
 
     # Start the `podman` API service needed by `nomad`.
     nomad-driver-podman-start )
-      local usage="USAGE: wb backend pass $op"
-
       msg "Preparing podman API service for nomad driver \`nomad-driver-podman\` ..."
       local podman_socket_path=$(backend_nomad nomad-driver-podman-socket-path)
 #      if test -S "$socket"
@@ -652,11 +691,14 @@ backend_nomad() {
       if nomad_driver_podman_pid_number=$(backend_nomad nomad-driver-podman-pid)
       then
         msg "Killing nomad-driver-podman (PID $nomad_driver_podman_pid_number) ..."
-        kill -SIGINT "$nomad_driver_podman_pid_number"
+        if ! kill -SIGINT "$nomad_driver_podman_pid_number"
+        then
+          fatal "Killing nomad-driver-podman API service failed"
+        fi
         local nomad_driver_podman_pid_file=$(backend_nomad nomad-driver-podman-pid-file)
         rm "$nomad_driver_podman_pid_file"
       else
-        msg "nomad-driver-podman server is not running"
+        msg "nomad-driver-podman API service server is not running"
         false
       fi
     ;;
@@ -671,7 +713,7 @@ backend_nomad() {
       then
         local nomad_driver_podman_pid_number=$(cat "${nomad_driver_podman_pid_file}")
         # Check if the process is running
-        if kill -0 "${nomad_driver_podman_pid_number}"
+        if kill -0 "${nomad_driver_podman_pid_number}" 2>&1 >/dev/null
         then
           echo "${nomad_driver_podman_pid_number}"
         else
@@ -685,8 +727,6 @@ backend_nomad() {
 
     # Start the Nomad in -dev mode (all in one server and agent)
     nomad-server-start )
-      local usage="USAGE: wb backend pass $op"
-
       # Checks
       local nomad_server_pid_number
       # Call without `local` to obtain the subcommand's return code.
@@ -742,14 +782,15 @@ backend_nomad() {
 
     # Stop the Nomad server running in -dev mode (all in one server and agent)
     nomad-server-stop )
-      local usage="USAGE: wb backend pass $op"
-
       local nomad_server_pid_number
       # Call without `local` to obtain the subcommand's return code.
       if nomad_server_pid_number=$(backend_nomad nomad-server-pid)
       then
-        msg "Killing nomad server (PID $nomad_server_pid_number) ..."
-        kill -SIGINT "$nomad_server_pid_number"
+        msg "Killing Nomad server (PID $nomad_server_pid_number) ..."
+        if ! kill -SIGINT "$nomad_server_pid_number"
+        then
+          fatal "Killing Nomad server failed"
+        fi
         local nomad_server_pid_file=$(backend_nomad nomad-server-pid-file)
         rm "$nomad_server_pid_file"
       else
@@ -768,7 +809,7 @@ backend_nomad() {
       then
         local nomad_server_pid_number=$(cat "${nomad_server_pid_file}")
         # Check if the process is running
-        if kill -0 "${nomad_server_pid_number}"
+        if kill -0 "${nomad_server_pid_number}" 2>&1 >/dev/null
         then
           echo "${nomad_server_pid_number}"
         else
@@ -1103,10 +1144,10 @@ EOF
 # [https://github.com/hashicorp/nomad/issues/6758#issuecomment-794116722]
 nomad_create_job_file() {
     local dir=$1
-    local profile_nomad_job_file=$(envjqr 'profile_nomad_job_file')
-    local nomad_job_name=$(envjqr         'nomad_job_name')
-    local nomad_job_group_name=$(envjqr   'nomad_job_group_name')
-    local one_tracer_per_node=$(envjq     'one_tracer_per_node')
+    local profile_nomad_job_file=$(envjqr       'profile_nomad_job_file')
+    local profile_nomad_job_name=$(envjqr       'profile_nomad_job_name')
+    local profile_nomad_job_group_name=$(envjqr 'profile_nomad_job_group_name')
+    local one_tracer_per_node=$(envjq           'one_tracer_per_node')
     cp $profile_nomad_job_file $dir/nomad/nomad-job.json
     chmod +w $dir/nomad/nomad-job.json
     # If CARDANO_MAINNET_MIRROR is present generate a list of needed volumes.
@@ -1150,7 +1191,7 @@ nomad_create_job_file() {
         \$mainnet_mirror_volumes
       "
       local podman_volumes=$(jq "$jq_filter" --argjson one_tracer_per_node "$one_tracer_per_node" --argjson mainnet_mirror_volumes "$mainnet_mirror_volumes" "$dir"/profile/node-specs.json)
-      jq ".job[\"$nomad_job_name\"][\"group\"][\"$nomad_job_group_name\"][\"task\"][\"$node\"][\"config\"][\"volumes\"] = \$podman_volumes" --argjson podman_volumes "$podman_volumes" $dir/nomad/nomad-job.json | sponge $dir/nomad/nomad-job.json
+      jq ".job[\"$profile_nomad_job_name\"][\"group\"][\"$profile_nomad_job_group_name\"][\"task\"][\"$node\"][\"config\"][\"volumes\"] = \$podman_volumes" --argjson podman_volumes "$podman_volumes" $dir/nomad/nomad-job.json | sponge $dir/nomad/nomad-job.json
     done
     # Tracer
     if jqtest ".node.tracer" "$dir"/profile.json && ! test "$one_tracer_per_node" = "true"
@@ -1163,6 +1204,6 @@ nomad_create_job_file() {
         ]
       "
       local podman_volumes_t=$(jq "$jq_filter_t" "$dir"/profile/node-specs.json)
-      jq ".job[\"$nomad_job_name\"][\"group\"][\"$nomad_job_group_name\"][\"task\"][\"tracer\"][\"config\"][\"volumes\"] = \$podman_volumes_t" --argjson podman_volumes_t "$podman_volumes_t" $dir/nomad/nomad-job.json | sponge $dir/nomad/nomad-job.json
+      jq ".job[\"$profile_nomad_job_name\"][\"group\"][\"$profile_nomad_job_group_name\"][\"task\"][\"tracer\"][\"config\"][\"volumes\"] = \$podman_volumes_t" --argjson podman_volumes_t "$podman_volumes_t" $dir/nomad/nomad-job.json | sponge $dir/nomad/nomad-job.json
     fi
 }
