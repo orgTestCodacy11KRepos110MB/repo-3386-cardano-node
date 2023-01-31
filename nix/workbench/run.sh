@@ -372,17 +372,17 @@ EOF
         local profile_name=${1:?$usage}; shift
         local backend_name=${1:?$usage}; shift
 
-        local profile_data= topology= genesis_cache_entry= manifest= cabal_mode=
+        local profile_data= topology= genesis_cache_entry= manifest=
         while test $# -gt 0
         do case "$1" in
                --manifest )            manifest=$2; shift;;
                --profile-data )        profile_data=$2; shift;;
                --topology )            topology=$2; shift;;
                --genesis-cache-entry ) genesis_cache_entry=$2; shift;;
-               --cabal-mode | --cabal ) cabal_mode=t;;
                -- ) shift; break;;
                --* ) msg "FATAL:  unknown flag '$1'"; usage_run;;
                * ) break;; esac; shift; done
+        local backend_args=("$@")
 
         ## 1. genesis cache entry
         progress "run | genesis" "cache entry:  $(if test -n "$genesis_cache_entry"; then echo pre-supplied; else echo preparing a new one..; fi)"
@@ -467,7 +467,7 @@ EOF
         cp "$dir"/genesis/genesis.alonzo.json  "$dir"/genesis.alonzo.json
         echo >&2
 
-        backend allocate-run "$dir"
+        backend allocate-run "$dir" "${backend_args[@]}"
 
         progress "run" "allocated $(with_color white $run) @ $dir"
         run     describe "$run"

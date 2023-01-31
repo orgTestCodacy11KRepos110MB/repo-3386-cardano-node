@@ -159,23 +159,30 @@ start()
         --cache-dir )                    setenvjqstr 'cacheDir' $2; shift;;
         --base-port )                    setenvjq    'basePort' $2; shift;;
 
-        --profile-data )                 run_allocate_args+=($1 $2); profile_data=$2; shift;;
         --backend-data )                 backend_data=$2; shift;;
+
+        --cabal-mode | --cabal )         cabal_mode=t;;
+        --node-source )                  node_source=$2; shift;;
+        --node-rev )                     node_rev=$2; shift;;
+
+        ## Allocate
         --genesis-cache-entry )          run_allocate_args+=($1 $2); shift;;
         --topology )                     run_allocate_args+=($1 $2); shift;;
+        --profile-data )                 run_allocate_args+=($1 $2); profile_data=$2; shift;;
+        -- )                             shift ## Bulk-pass:
+                                         run_allocate_args+=("$@")
+                                         break;;
 
+        ## Start
         --idle )                         run_start_args+=($1);;
         --scenario | -s )                run_start_args+=($1 $2); shift;;
 
+        ## Analyse
         --no-analysis )                  no_analysis=true;;
         --analysis-can-fail | -af )      analysis_can_fail=t;;
         --filters )                      analyse_args+=($1 $2); shift;;
 
-        --node-source )                  node_source=$2; shift;;
-        --node-rev )                     node_rev=$2; shift;;
-        --cabal-mode | --cabal )         run_allocate_args+=($1); cabal_mode=t;;
-        --skip-prebuild | -sp )          skip_prebuild=t;;
-
+        ## Aux
         --verbose | -v )                 export verbose=t;;
         --trace | --debug )              set -x;;
         --trace-wb | --trace-workbench ) export WB_EXTRA_FLAGS=--trace;;
@@ -202,21 +209,21 @@ start()
        local manifest=$(manifest collect-from-checkout "$node_source" $node_rev)
        manifest report "$manifest"
 
-       if test -z "$cabal_mode" -o -n "$prebuild_done"
-       then true
-       elif test -n "$skip_prebuild"
-       then progress "workbench | cabal" "skipping Cabal prebuilding due to $(yellow --skip-prebuild)"
-       else workbench-prebuild-executables
+       if test -n "$cabal_mode" -a -z "$prebuild_done"
+       then workbench-prebuild-executables
             prebuild_done=t
        fi
 
        progress "top-level" "profile $(with_color 'yellow' $profile_name), iteration $(with_color 'white' $((top_i+1))) of $(with_color 'yellow' $iterations)"
 
-       local args=(
-            ${run_allocate_args[@]}
+       local allocate_args=(
+           $batch_name
+           $profile_name
+           $WB_BACKEND
             --manifest "$manifest"
+            ${run_allocate_args[@]}
        )
-       run ${run_args[@]} 'allocate' $batch_name $profile_name $backend "${args[@]}"
+       run "${run_args[@]}" allocate "${allocate_args[@]}"
        local run=$(run current-tag)
 
        current_run_path=$(run current-path)
@@ -248,9 +255,11 @@ finish()
     run stop $(run current-tag)
 }
 
-pass_flags=()
 while test $# -gt 0
 do case "$1" in
+       --nixops     | --backend-nixops )     export WB_BACKEND=nixops;;
+       --nomad      | --backend-nomad )      export WB_BACKEND=nomad;;
+       --supervisor | --backend-supervisor ) export WB_BACKEND=supervisor;;
        --cls )
            echo -en "\ec">&2;;
        --trace | --debug )

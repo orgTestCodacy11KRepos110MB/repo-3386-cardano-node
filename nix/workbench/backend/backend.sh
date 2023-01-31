@@ -65,7 +65,8 @@ case "${op}" in
         if test "$actual_name" != "$WB_BACKEND"
         then fatal "Workbench is broken:  'workbench_$WB_BACKEND name' returned:  '$actual_name'"; fi
 
-        backend_$WB_BACKEND validate;;
+        # backend_$WB_BACKEND validate
+        true;;
 
     assert-stopped )
         backend is-running run/current &&

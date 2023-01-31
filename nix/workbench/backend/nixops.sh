@@ -30,18 +30,21 @@ case "$op" in
 
     allocate-run )
         local usage="USAGE: wb nixops $op RUN-DIR"
+        local nixops_backend=aws
+
         local dir=${1:?$usage}; shift
 
         while test $# -gt 0
         do case "$1" in
-               --* ) msg "FATAL:  unknown flag '$1'"; usage_nixops;;
+               --aws )      nixops_backend=aws;;
+               --libvirtd ) nixops_backend=libvirtd;;
                * ) break;; esac; shift; done
+
+        local deploy_args=("$@")
 
         mkdir -p           "$dir"/nixops
 
         local depl=$(envjqr 'deployment')
-        local phy=aws
-        # local phy=libvirtd
 
         local crmod=$(if nixops list | grep --quiet --no-messages -F "| $depl "
                       then echo modify
@@ -51,22 +54,21 @@ case "$op" in
             --deployment $depl
             -I profileJson="$dir"/profile.json
 
-            nix/workbench/backend/nixops/physical-$phy.nix
+            nix/workbench/backend/nixops/physical-$nixops_backend.nix
         )
         nixops $crmod "${crmod_args[@]}"
 
-        local deploy_args=(
+        deploy_args+=(
             --deployment $depl
             -I profileJson="$dir"/profile.json
             --allow-reboot
             --confirm
-            # --build-only
-            # --copy-only
             --show-trace
             --no-build-output
             --cores 0
             -j 4
         )
+        export WB_GENESIS_DIR=$(realpath 'run/current/genesis')
         nixops deploy "${deploy_args[@]}"
         ;;
 

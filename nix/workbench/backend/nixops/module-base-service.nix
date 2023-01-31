@@ -91,11 +91,7 @@ in
 
     ## Services:
     ../../../nixos
-    (import ../../../nixos/cardano-tracer-service.nix
-      ## XXX: ugly -- svclib should really move to iohk-nix.
-      (pkgs
-       //
-       { commonLib = import ../../../svclib.nix { inherit pkgs; }; }))
+    (import ../../../nixos/cardano-tracer-service.nix pkgs)
   ];
 
   options = {

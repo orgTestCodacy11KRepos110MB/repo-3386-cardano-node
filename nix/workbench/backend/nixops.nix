@@ -2,7 +2,7 @@
 , lib
 , ...
 }:
-with lib;
+with lib; with pkgs.commonLib;
 let
   nixopsAlaCardanoOps =
     let plugins = [ "nixops-aws"
@@ -115,11 +115,6 @@ let
       AlonzoGenesisFile  = "${genesis.files}/genesis.alonzo.json";
       ShelleyGenesisFile = "${genesis.files}/genesis-shelley.json";
       ByronGenesisFile   = "${genesis.files}/byron/genesis.json";
-      requireEnv = name:
-        let value = builtins.getEnv name;
-        in if value == ""
-           then abort "${name} environment variable is not set"
-           else value;
     in
     rec {
       profile = profileNix;

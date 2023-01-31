@@ -4,19 +4,20 @@ let
 
   leftPad = number: width: lib.fixedWidthString width "0" (toString number);
 
-  signingKey = ../keys/byron/delegate-keys + ".${leftPad (nodeId - 1) 3}.key";
-  delegationCertificate = ../keys/byron/delegation-cert + ".${leftPad (nodeId - 1) 3}.json";
+  genDir = commonLib.requireEnv "WB_GENESIS_DIR";
 
-  vrfKey = ../keys/node-keys/node-vrf + "${toString nodeId}.skey";
-  kesKey = ../keys/node-keys/node-kes + "${toString nodeId}.skey";
-  operationalCertificate = ../keys/node-keys/node + "${toString nodeId}.opcert";
-  bulkCredentials = ../keys/node-keys/bulk + "${toString nodeId}.creds";
+  signingKey = genDir + "/byron/delegate-keys.${leftPad (nodeId - 1) 3}.key";
+  delegCert  = genDir + "/byron/delegation-cert.${leftPad (nodeId - 1) 3}.json";
+  vrfKey     = genDir + "/node-keys/node-vrf${toString nodeId}.skey";
+  kesKey     = genDir + "/node-keys/node-kes${toString nodeId}.skey";
+  opCert     = genDir + "/node-keys/node${toString nodeId}.opcert";
+  bulkCreds  = genDir + "/node-keys/bulk-${toString nodeId}.creds";
 
   keysConfig = rec {
     RealPBFT = {
       _file = ./core.nix;
       services.cardano-node = {
-        signingKey = "/var/lib/keys/cardano-node-signing";
+        signingKey            = "/var/lib/keys/cardano-node-signing";
         delegationCertificate = "/var/lib/keys/cardano-node-delegation-cert";
       };
       systemd.services."cardano-node" = {
@@ -30,8 +31,8 @@ let
             group = "cardano-node";
             destDir = "/var/lib/keys";
         };
-        "cardano-node-delegation-cert" = builtins.trace ("${name}: using " + (toString delegationCertificate)) {
-            keyFile = delegationCertificate;
+        "cardano-node-delegation-cert" = builtins.trace ("${name}: using " + (toString delegCert)) {
+            keyFile = delegCert;
             user = "cardano-node";
             group = "cardano-node";
             destDir = "/var/lib/keys";
@@ -70,8 +71,8 @@ let
               group = "cardano-node";
               destDir = "/var/lib/keys";
             };
-            "cardano-node-operational-cert" = builtins.trace ("${name}: using " + (toString operationalCertificate)) {
-              keyFile = operationalCertificate;
+            "cardano-node-operational-cert" = builtins.trace ("${name}: using " + (toString opCert)) {
+              keyFile = opCert;
               user = "cardano-node";
               group = "cardano-node";
               destDir = "/var/lib/keys";
