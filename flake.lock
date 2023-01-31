@@ -10506,16 +10506,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1674063615,
-        "narHash": "sha256-xz/+7zO/O+2XrnxoFOjyEc72Sdy2ieQLpDq78XG15oI=",
+        "lastModified": 1672846257,
+        "narHash": "sha256-khuzjVfyNCVcsV5cHRyyb2OgWLbYLKSJlrVDNmc2Tv4=",
         "owner": "input-output-hk",
         "repo": "iohk-nix",
-        "rev": "ccd5bf7d8168a0452d9ec504ea1b559ada7752df",
+        "rev": "ca3d466ed36011bcc14290c6d36c503eb03eb71b",
         "type": "github"
       },
       "original": {
         "owner": "input-output-hk",
         "repo": "iohk-nix",
+        "rev": "ca3d466ed36011bcc14290c6d36c503eb03eb71b",
         "type": "github"
       }
     },

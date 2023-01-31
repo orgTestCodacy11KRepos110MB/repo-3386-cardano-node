@@ -29,7 +29,8 @@
     };
     utils.url = "github:numtide/flake-utils";
     iohkNix = {
-      url = "github:input-output-hk/iohk-nix";
+      # pin iohk-nix to an older revision without the sodium renaming
+      url = "github:input-output-hk/iohk-nix/ca3d466ed36011bcc14290c6d36c503eb03eb71b";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     flake-compat = {
