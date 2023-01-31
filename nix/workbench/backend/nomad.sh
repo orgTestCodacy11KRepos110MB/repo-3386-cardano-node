@@ -116,26 +116,28 @@ backend_nomad() {
       # must be created or obtained.
       setenvjq 'nomad_topology' \
         "{ \
-            \"server1\": { \
-               \"agent-type\":\"server\" \
-             , \"region\":\"r1\" \
-             , \"datacenter\":\"dc1\" \
-             , \"ports\":{ \
+            \"servers\": { \
+              \"srv1\": { \
+               , \"region\":\"r1\" \
+               , \"datacenter\":\"dc1\" \
+               , \"ports\":{ \
                    \"http\":4646 \
                  , \"rpc\": 4647 \
                  , \"serf\":4648 \
-               } \
-           } \
-          , \"client1\": { \
-               \"agent-type\":\"client\" \
-             , \"region\":\"r22\" \
-             , \"datacenter\":\"dc0\" \
-             , \"ports\":{ \
-                   \"http\":14646 \
-                 , \"rpc\": 14647 \
-                 , \"serf\":14648 \
-               } \
-           } \
+                } \
+              } \
+            } \
+          , \"clients\": { \
+              \"cli1\": { \
+               , \"region\":\"r22\" \
+               , \"datacenter\":\"dc0\" \
+               , \"ports\":{ \
+                     \"http\":14646 \
+                   , \"rpc\": 14647 \
+                 } \
+               , \"servers\": [ \"srv1\" ] \
+              } \
+            } \
          }"
       ;;
 
