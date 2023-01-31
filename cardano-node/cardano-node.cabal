@@ -183,7 +183,6 @@ library
                       , stm
                       , text
                       , time
-                      , tracer-transformers
                       , trace-dispatcher
                       , trace-forward
                       , trace-resources
