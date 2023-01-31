@@ -105,7 +105,7 @@ let
     namespace = "default";
 
     # The region in which to execute the job.
-    region = "workbench-region";
+    region = "workbench-region-1";
 
     #  A list of datacenters in the region which are eligible for task
     # placement. This must be provided, and does not have a default.

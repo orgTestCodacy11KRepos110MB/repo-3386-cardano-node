@@ -3,25 +3,30 @@ usage_nomad() {
 
     Please see documentation for 'wb backend' for the supported commands.
 
-    Nomad-specific:
+    - Nomad backend specific:
+
+    - - Subcommands that need a RUN-DIR:
 
     task-service-start      RUN-DIR NOMAD-TASK-NAME SUPERVISORCTL-SERVICE
     task-service-stop       RUN-DIR NOMAD-TASK-NAME SUPERVISORCTL-SERVICE
     is-task-service-running RUN-DIR NOMAD-TASK-NAME SUPERVISORCTL-SERVICE
     task-supervisorctl      RUN-DIR NOMAD-TASK-NAME SUPERVISORCTL-ACTION [ARGS]
 
-    nomad-server-config-file
-    nomad-server-configure
+    - - Subcommands that don't need a RUN-DIR:
+
+    nomad-[server|client]-config-file
+    nomad-[server|client]-configure
+
     nomad-driver-podman-socket-path
     nomad-driver-podman-start
     nomad-driver-podman-stop
     nomad-driver-podman-pid-file
     nomad-driver-podman-pid
 
-    nomad-server-start
-    nomad-server-stop
-    nomad-server-pid-file
-    nomad-server-pid
+    nomad-[server|client]-start
+    nomad-[server|client]-stop
+    nomad-[server|client]-pid-file
+    nomad-[server|client]-pid
 EOF
 }
 
@@ -278,18 +283,23 @@ backend_nomad() {
       # Reuse an already running cardano-workbench Nomad server!
       if backend_nomad nomad-server-pid >/dev/null
       then
-        setenvjqstr 'nomad_server_was_already_running' "true"
-        msg "Reusing already up and running Nomad server"
+        setenvjqstr 'nomad_agents_were_already_running' "true"
+        msg "Reusing already up and running Nomad agents (server found)"
       else
-        setenvjqstr 'nomad_server_was_already_running' "false"
-        # Create config files for Nomad and the Podman plugin/task driver.
+        setenvjqstr 'nomad_agents_were_already_running' "false"
+        # Create config files for the server.
         backend_nomad nomad-server-configure
+        # Create config files for the client and the Podman plugin/task driver.
+        backend_nomad nomad-client-configure
         # Start server, client and plugins.
         backend_nomad nomad-agents-start
       fi
       ln -s "$nomad_server_dir"/nomad.log "$dir"/nomad/server.log
       ln -s "$nomad_server_dir"/stdout "$dir"/nomad/server.stdout
       ln -s "$nomad_server_dir"/stderr "$dir"/nomad/server.stderr
+      ln -s "$nomad_client_dir"/nomad.log "$dir"/nomad/client.log
+      ln -s "$nomad_client_dir"/stdout "$dir"/nomad/client.stdout
+      ln -s "$nomad_client_dir"/stderr "$dir"/nomad/client.stderr
 
       msg "Starting nomad job ..."
       # Upon successful job submission, this command will immediately enter
@@ -529,8 +539,8 @@ backend_nomad() {
       # {"@level":"debug","@message":"Could not get container stats, unknown error","@module":"podman.podmanHandle","@timestamp":"2022-12-14T14:34:16.320494Z","driver":"podman","error":"\u0026url.Error{Op:\"Get\", URL:\"http://u/v1.0.0/libpod/containers/a55f689be4d2898225c76fa12716cfa0c0dedd54a1919e82d44523a35b8d07a4/stats?stream=false\", Err:(*net.OpError)(0xc000ba5220)}","timestamp":"2022-12-14T14:34:16.320Z"}
       nomad job stop -global -no-shutdown-delay -purge -yes -verbose "$nomad_job_name" >> "$dir/nomad/job.stdout" 2>> "$dir/nomad/job.stderr"
 
-      local nomad_server_was_already_running=$(envjqr 'nomad_server_was_already_running')
-      if test "$nomad_server_was_already_running" = "false"
+      local nomad_agents_were_already_running=$(envjqr 'nomad_agents_were_already_running')
+      if test "$nomad_agents_were_already_running" = "false"
       then
         backend_nomad nomad-agents-stop
       fi
@@ -547,7 +557,7 @@ backend_nomad() {
       rm -f $dir/*/std{out,err} $dir/node-*/*.socket $dir/*/logs/* 2>/dev/null || true
       rm -fr $dir/node-*/state-cluster/
       # Clean Nomad process calling logs (actual logs inside "~/.cache")
-      rm -f $dir/nomad/server.{log,stdout,stderr}
+      rm -f $dir/nomad/{server,client}.{log,stdout,stderr}
       rm -f $dir/nomad/job.std{out,err}
       ;;
 
@@ -600,21 +610,33 @@ backend_nomad() {
       nomad alloc exec --task "$task" "$nomad_alloc_id" "$container_supervisor_nix"/bin/supervisorctl --serverurl "$container_supervisord_url" --configuration "$container_supervisord_conf" "$action" $@
       ;;
 
-    ## Nomad server/agent subcommands
-    #################################
+    ## Nomad agents (server/client(s)) subcommands
+    ##############################################
+
+    ### Start/stop everything (server, client, pluging)!
+    ####################################################
 
     nomad-agents-start )
       backend_nomad nomad-driver-podman-start
       backend_nomad nomad-server-start
+      backend_nomad nomad-client-start
     ;;
 
     nomad-agents-stop )
-      backend_nomad nomad-server-stop
+      backend_nomad nomad-client-stop
       backend_nomad nomad-driver-podman-stop
+      backend_nomad nomad-server-stop
     ;;
+
+    ### Configure server and client
+    ###############################
 
     nomad-server-config-file )
       echo "$nomad_server_dir"/config/nomad.hcl
+    ;;
+
+    nomad-client-config-file )
+      echo "$nomad_client_dir"/config/nomad.hcl
     ;;
 
     nomad-server-configure )
@@ -624,26 +646,51 @@ backend_nomad() {
         fatal "Nomad server is already running, call 'wb backend pass nomad-server-stop' first"
       else
         # Needed folders:
-        ## Server
         mkdir -p "${nomad_server_dir}"/config
-        mkdir -p "${nomad_server_dir}"/data
-        mkdir -p "${nomad_server_dir}"/data/plugins
-        ## Client
-        mkdir -p "${nomad_client_dir}"/data/client
-        mkdir -p "${nomad_client_dir}"/data/alloc
+        mkdir -p "${nomad_server_dir}"/data/server
         # Vars
         local nomad_server_config_file=$(backend_nomad nomad-server-config-file)
+        # Configure
+        nomad_create_server_config "${nomad_server_config_file}"
+      fi
+    ;;
+
+    nomad-client-configure )
+      # Checks
+      if backend_nomad nomad-client-pid >/dev/null
+      then
+        fatal "Nomad client is already running, call 'wb backend pass nomad-client-stop' first"
+      else
+        # Needed folders:
+        mkdir -p "${nomad_client_dir}"/config
+        mkdir -p "${nomad_client_dir}"/data/client
+        mkdir -p "${nomad_client_dir}"/data/plugins
+        mkdir -p "${nomad_client_dir}"/data/alloc
+        # Vars
+        local nomad_client_config_file=$(backend_nomad nomad-client-config-file)
         local podman_socket_path=$(backend_nomad nomad-driver-podman-socket-path)
         # Podman Task Driver - Client Requirements:
         ## "Ensure that Nomad can find the plugin, refer to `plugin_dir`."
         ### https://www.nomadproject.io/plugins/drivers/podman#client-requirements
-        ## On every call to `wb backend pass nomad-server-configure` the
+        ## On every call to `wb backend pass nomad-client-configure` the
         ## available `nomad-driver-podman` is replaced.
-        rm  -f "${nomad_server_dir}"/data/plugins/nomad-driver-podman
-        ln -s -f "$(which nomad-driver-podman)" "${nomad_server_dir}"/data/plugins/nomad-driver-podman
-        nomad_create_server_config "${nomad_server_config_file}" "${podman_socket_path}"
+        rm  -f "${nomad_client_dir}"/data/plugins/nomad-driver-podman
+        ln -s -f "$(which nomad-driver-podman)" "${nomad_client_dir}"/data/plugins/nomad-driver-podman
+        # TODO: CNI plugins?
+        ####################
+        # local cni_plugins_path="${nomad_client_dir}"/data/plugins/cni-plugins
+        # Without `rm` you get:
+        # ln: failed to create symbolic link '${HOME}/.cache/cardano-workbench/nomad/client/data/plugins/cni-plugins/bin': Read-only file system
+        #rm -f "${cni_plugins_path}"
+        #ln -s -f "$(dirname $(which host-device))" "${cni_plugins_path}"
+        ####################
+        # Configure
+        nomad_create_client_config "${nomad_client_config_file}" "${podman_socket_path}" #"${cni_plugins_path}"
       fi
     ;;
+
+    ### nomad-driver-podman plugin
+    ##############################
 
     nomad-driver-podman-socket-path )
       # Socket of the process that connects nomad-driver-podman with podman.
@@ -704,7 +751,7 @@ backend_nomad() {
     ;;
 
     nomad-driver-podman-pid-file )
-      echo "$nomad_server_dir"/nomad-driver-podman.pid
+      echo "$(envjqr 'cacheDir')"/nomad/nomad-driver-podman.pid
     ;;
 
     nomad-driver-podman-pid )
@@ -725,36 +772,38 @@ backend_nomad() {
       fi
     ;;
 
-    # Start the Nomad in -dev mode (all in one server and agent)
+    ### Start/stop server and client
+    ################################
+
+    # The Nomad agent is a long running process which runs on every machine
+    # that is part of the Nomad cluster. The behavior of the agent depends
+    # on if it is running in client or server mode. Clients are responsible
+    # for running tasks, while servers are responsible for managing the
+    # cluster.
+    #
+    # The Nomad agent supports multiple configuration files, which can be
+    # provided using the -config CLI flag. The flag can accept either a file
+    # or folder. In the case of a folder, any .hcl and .json files in the
+    # folder will be loaded and merged in lexicographical order. Directories
+    # are not loaded recursively.
+    #   -config=<path>
+    # The path to either a single config file or a directory of config files
+    # to use for configuring the Nomad agent. This option may be specified
+    # multiple times. If multiple config files are used, the values from
+    # each will be merged together. During merging, values from files found
+    # later in the list are merged over values from previously parsed file.
+
+    # Start the Nomad server (clients are needed to submit jobs)
     nomad-server-start )
       # Checks
       local nomad_server_pid_number
       # Call without `local` to obtain the subcommand's return code.
-      if nomad_server_pid_number=wb publish socat pid
+      if nomad_server_pid_number=$(backend_nomad nomad-server-pid)
       then
         msg "Nomad server is already running with PID ${nomad_server_pid_number}"
       else
         # Start `nomad` server".
         msg "Starting nomad server ..."
-        # The Nomad agent is a long running process which runs on every machine
-        # that is part of the Nomad cluster. The behavior of the agent depends
-        # on if it is running in client or server mode. Clients are responsible
-        # for running tasks, while servers are responsible for managing the
-        # cluster.
-        #
-        # The Nomad agent supports multiple configuration files, which can be
-        # provided using the -config CLI flag. The flag can accept either a file
-        # or folder. In the case of a folder, any .hcl and .json files in the
-        # folder will be loaded and merged in lexicographical order. Directories
-        # are not loaded recursively.
-        #   -config=<path>
-        # The path to either a single config file or a directory of config files
-        # to use for configuring the Nomad agent. This option may be specified
-        # multiple times. If multiple config files are used, the values from
-        # each will be merged together. During merging, values from files found
-        # later in the list are merged over values from previously parsed file.
-        #
-        # Running a dual-role agent (client + server) but not "-dev" mode.
         local nomad_server_config_file=$(backend_nomad nomad-server-config-file)
         local nomad_server_pid_file=$(backend_nomad nomad-server-pid-file)
         nomad agent -config="${nomad_server_config_file}" >> "$nomad_server_dir"/stdout 2>> "$nomad_server_dir"/stderr &
@@ -771,7 +820,7 @@ backend_nomad() {
         i=$((i+1))
         if test $i -ge $patience
         then echo
-          progress "nomad agent" "$(red FATAL):  workbench:  nomad agent:  patience ran out after ${patience}s, 127.0.0.1:4646"
+          progress "nomad agent" "$(red FATAL):  workbench:  nomad server:  patience ran out after ${patience}s, 127.0.0.1:4646"
           tail "$nomad_server_dir"/stderr
           rm "$nomad_server_pid_file"
           fatal "nomad server startup did not succeed:  check logs"
@@ -780,7 +829,43 @@ backend_nomad() {
       done >&2
     ;;
 
-    # Stop the Nomad server running in -dev mode (all in one server and agent)
+    # Start the Nomad client (a server is needed)
+    nomad-client-start )
+      # Checks
+      local nomad_client_pid_number
+      # Call without `local` to obtain the subcommand's return code.
+      if nomad_client_pid_number=$(backend_nomad nomad-client-pid)
+      then
+        msg "Nomad client is already running with PID ${nomad_client_pid_number}"
+      else
+        # Start `nomad` client".
+        msg "Starting nomad client ..."
+        local nomad_client_config_file=$(backend_nomad nomad-client-config-file)
+        local nomad_client_pid_file=$(backend_nomad nomad-client-pid-file)
+        nomad agent -config="${nomad_client_config_file}" >> "$nomad_client_dir"/stdout 2>> "$nomad_client_dir"/stderr &
+        nomad_client_pid_number="$!"
+        echo "${nomad_client_pid_number}" > "$nomad_client_pid_file"
+        msg "Nomad client started with PID ${nomad_client_pid_number}"
+      fi
+
+      # Even if Nomad server was already running, try to connect to it!
+      local i=0 patience=25
+      msg "Trying/waiting for the listening HTTP server (${patience}s) ..."
+      until curl -Isf 127.0.0.1:4646 2>&1 | head --lines=1 | grep --quiet "HTTP/1.1"
+      do printf "%3d" $i; sleep 1
+        i=$((i+1))
+        if test $i -ge $patience
+        then echo
+          progress "nomad agent" "$(red FATAL):  workbench:  nomad client:  patience ran out after ${patience}s, 127.0.0.1:4646"
+          tail "$nomad_client_dir"/stderr
+          rm "$nomad_client_pid_file"
+          fatal "nomad client startup did not succeed:  check logs"
+        fi
+        echo -ne "\b\b\b"
+      done >&2
+    ;;
+
+    # Stop only the Nomad server (one or more clients may still be running)
     nomad-server-stop )
       local nomad_server_pid_number
       # Call without `local` to obtain the subcommand's return code.
@@ -799,8 +884,31 @@ backend_nomad() {
       fi
     ;;
 
+    # Stop only the Nomad client (the server may still be running)
+    nomad-client-stop )
+      local nomad_client_pid_number
+      # Call without `local` to obtain the subcommand's return code.
+      if nomad_client_pid_number=$(backend_nomad nomad-client-pid)
+      then
+        msg "Killing Nomad client (PID $nomad_client_pid_number) ..."
+        if ! kill -SIGINT "$nomad_client_pid_number"
+        then
+          fatal "Killing Nomad client failed"
+        fi
+        local nomad_client_pid_file=$(backend_nomad nomad-client-pid-file)
+        rm "$nomad_client_pid_file"
+      else
+        msg "Nomad client is not running"
+        false
+      fi
+    ;;
+
     nomad-server-pid-file )
       echo "$nomad_server_dir"/nomad.pid
+    ;;
+
+    nomad-client-pid-file )
+      echo "$nomad_client_dir"/nomad.pid
     ;;
 
     nomad-server-pid )
@@ -821,6 +929,24 @@ backend_nomad() {
       fi
     ;;
 
+    nomad-client-pid )
+      local nomad_client_pid_file=$(backend_nomad nomad-client-pid-file)
+      if test -f $nomad_client_pid_file
+      then
+        local nomad_client_pid_number=$(cat "${nomad_client_pid_file}")
+        # Check if the process is running
+        if kill -0 "${nomad_client_pid_number}" 2>&1 >/dev/null
+        then
+          echo "${nomad_client_pid_number}"
+        else
+          rm "${nomad_client_pid_file}"
+          false
+        fi
+      else
+        false
+      fi
+    ;;
+
     * )
       usage_nomad
     ;;
@@ -828,6 +954,13 @@ backend_nomad() {
   esac
 
 }
+
+# Network Topology
+# https://developer.hashicorp.com/nomad/docs/install/production/requirements#network-topology
+# Nomad Deployment Guide
+# https://developer.hashicorp.com/nomad/tutorials/enterprise/production-deployment-guide-vm-with-consul
+# Deployment topology across multiple regions
+# https://developer.hashicorp.com/nomad/tutorials/enterprise/production-reference-architecture-vm-with-consul#multi-region
 
 # Configure `nomad` and its `podman` plugin / task driver
 # (Task Drivers are also called plugins because they are pluggable).
@@ -852,7 +985,6 @@ backend_nomad() {
 #     touch $HOME/.config/containers/policy.json
 nomad_create_server_config() {
   local nomad_server_config_file=$1
-  local podman_socket_path=$2
   # Config:
   # - `nomad` configuration docs:
   # - - https://developer.hashicorp.com/nomad/docs/configuration
@@ -868,14 +1000,14 @@ nomad_create_server_config() {
 # Specifies the region the Nomad agent is a member of. A region typically maps
 # to a geographic region, for example us, with potentially multiple zones, which
 # map to datacenters such as us-west and us-east.
-region = "workbench-region"
+region = "workbench-region-1"
 # Specifies the data center of the local agent. All members of a datacenter
 # should share a local LAN connection.
 datacenter = "workbench-datacenter-1"
 # Specifies the name of the local node. This value is used to identify
 # individual agents. When specified on a server, the name must be unique within
 # the region.
-name = "workbench-nomad-agent-1"
+name = "workbench-nomad-server-1"
 
 # Paths:
 ########
@@ -885,10 +1017,6 @@ name = "workbench-nomad-agent-1"
 # the replicated log and snapshot data. This must be specified as an absolute
 # path.
 data_dir  = "$nomad_server_dir/data"
-# Specifies the directory to use for looking up plugins. By default, this is the
-# top-level data_dir suffixed with "plugins", like "/opt/nomad/plugins". This
-# must be an absolute path.
-plugin_dir  = "$nomad_server_dir/data/plugins"
 
 # Network:
 ##########
@@ -921,24 +1049,25 @@ ports = {
 # network interface advertised. The advertise values may include an alternate
 # port, but otherwise default to the port used by the bind address. The values
 # support go-sockaddr/template format.
-# Needed becasue of the below error message:
-# "Defaulting advertise to localhost is unsafe, please set advertise manually"
+# Does not make ses to use advertise here or this way, but if not used (IDK):
+# > Failed to parse HTTP advertise address (, 127.0.0.1, 4646, false):
+# > Defaulting advertise to localhost is unsafe, please set advertise manually
 advertise {
   # The address to advertise for the HTTP interface. This should be reachable by
   # all the nodes from which end users are going to use the Nomad CLI tools.
-  http = "127.0.0.1:4646"
+  http = "127.0.0.1"
   # The address used to advertise to Nomad clients for connecting to Nomad
   # servers for RPC. This allows Nomad clients to connect to Nomad servers from
   # behind a NAT gateway. This address much be reachable by all Nomad client
   # nodes. When set, the Nomad servers will use the advertise.serf address for
   # RPC connections amongst themselves. Setting this value on a Nomad client has
   # no effect.
-  rpc = "127.0.0.1:4647"
+  rpc = "127.0.0.1"
   # The address advertised for the gossip layer. This address must be reachable
   # from all server nodes. It is not required that clients can reach this
   # address. Nomad servers will communicate to each other over RPC using the
   # advertised Serf IP and advertised RPC Port.
-  serf = "127.0.0.1:4648"
+  serf = "127.0.0.1"
 }
 # The tls stanza configures Nomad's TLS communication via HTTP and RPC to
 # enforce secure cluster communication between servers, clients, and between.
@@ -990,6 +1119,15 @@ leave_on_interrupt = true
 # terminated server instance will never join the cluster again.
 leave_on_terminate = true
 
+# Client:
+#########
+# https://developer.hashicorp.com/nomad/docs/configuration/client
+client {
+  # Specifies if client mode is enabled. All other client configuration options
+  # depend on this value.
+  enabled = false
+}
+
 # Server:
 #########
 # https://developer.hashicorp.com/nomad/docs/configuration/server
@@ -1037,10 +1175,196 @@ server {
   rejoin_after_leave = false
 }
 
+# Misc:
+#######
+# The vault stanza configures Nomad's integration with HashiCorp's Vault. When
+# configured, Nomad can create and distribute Vault tokens to tasks
+# automatically. For more information on the architecture and setup, please see
+# the Nomad and Vault integration documentation.
+vault {
+  # Specifies if the Vault integration should be activated.
+  enabled = false
+}
+# The acl stanza configures the Nomad agent to enable ACLs and tunes various ACL
+# parameters. Learn more about configuring Nomad's ACL system in the Secure
+# Nomad with Access Control guide.
+acl {
+  # Specifies if ACL enforcement is enabled. All other ACL configuration options
+  # depend on this value. Note that the Nomad command line client will send
+  # requests for client endpoints such as alloc exec directly to Nomad clients
+  # whenever they are accessible. In this scenario, the client will enforce
+  # ACLs, so both servers and clients should have ACLs enabled.
+  enabled = false
+}
+# The audit stanza configures the Nomad agent to configure Audit logging
+# behavior. Audit logging is an Enterprise-only feature.
+audit {
+  # Specifies if audit logging should be enabled. When enabled, audit logging
+  # will occur for every request, unless it is filtered by a filter.
+  enabled = true
+}
+# The consul stanza configures the Nomad agent's communication with Consul for
+# service discovery and key-value integration. When configured, tasks can
+# register themselves with Consul, and the Nomad cluster can automatically
+# bootstrap itself.
+consul {
+}
+# Specifies if Nomad should not check for updates and security bulletins. This
+# defaults to true in Nomad Enterprise.
+disable_update_check = true
+EOF
+}
+
+nomad_create_client_config() {
+  local nomad_client_config_file=$1
+  local podman_socket_path=$2
+  local cni_plugins_path="TODO"
+#  local cni_plugins_path=$3
+  # Config:
+  # - `nomad` configuration docs:
+  # - - https://developer.hashicorp.com/nomad/docs/configuration
+  # - Generic `nomad` plugins / task drivers configuration docs:
+  # - - https://www.nomadproject.io/plugins/drivers
+  # - - https://www.nomadproject.io/docs/configuration/plugin
+  # - Specific `nomad` `podman` plugin / task driver configuration docs:
+  # - - https://www.nomadproject.io/plugins/drivers/podman#plugin-options
+  # - - https://github.com/hashicorp/nomad-driver-podman#driver-configuration
+  cat > "$nomad_client_config_file" <<- EOF
+# Names:
+########
+# Specifies the region the Nomad agent is a member of. A region typically maps
+# to a geographic region, for example us, with potentially multiple zones, which
+# map to datacenters such as us-west and us-east.
+region = "workbench-region-1"
+# Specifies the data center of the local agent. All members of a datacenter
+# should share a local LAN connection.
+datacenter = "workbench-datacenter-1"
+# Specifies the name of the local node. This value is used to identify
+# individual agents. When specified on a server, the name must be unique within
+# the region.
+name = "workbench-nomad-client-1"
+
+# Paths:
+########
+# Specifies a local directory used to store agent state. Client nodes use this
+# directory by default to store temporary allocation data as well as cluster
+# information. Server nodes use this directory to store cluster state, including
+# the replicated log and snapshot data. This must be specified as an absolute
+# path.
+data_dir  = "$nomad_client_dir/data"
+# Specifies the directory to use for looking up plugins. By default, this is the
+# top-level data_dir suffixed with "plugins", like "/opt/nomad/plugins". This
+# must be an absolute path.
+plugin_dir  = "$nomad_client_dir/data/plugins"
+
+# Network:
+##########
+# Specifies which address the Nomad agent should bind to for network services,
+# including the HTTP interface as well as the internal gossip protocol and RPC
+# mechanism. This should be specified in IP format, and can be used to easily
+# bind all network services to the same address. It is also possible to bind the
+# individual services to different addresses using the "addresses" configuration
+# option. Dev mode (-dev) defaults to localhost.
+bind_addr = "127.0.0.1"
+# Specifies the network ports used for different services required by the Nomad
+# agent.
+ports = {
+  # The port used to run the HTTP server.
+  http = 14646
+  # The port used for internal RPC communication between agents and servers, and
+  # for inter-server traffic for the consensus algorithm (raft).
+  rpc  = 14647
+}
+# Specifies the advertise address for individual network services. This can be
+# used to advertise a different address to the peers of a server or a client
+# node to support more complex network configurations such as NAT. This
+# configuration is optional, and defaults to the bind address of the specific
+# network service if it is not provided. Any values configured in this stanza
+# take precedence over the default "bind_addr".
+# If the bind address is 0.0.0.0 then the IP address of the default private
+# network interface advertised. The advertise values may include an alternate
+# port, but otherwise default to the port used by the bind address. The values
+# support go-sockaddr/template format.
+# Does not make ses to use advertise here or this way, but if not used (IDK):
+# > Failed to parse HTTP advertise address (, 127.0.0.1, 4646, false):
+# > Defaulting advertise to localhost is unsafe, please set advertise manually
+# Same thing for the RPC address.
+advertise {
+  # The address to advertise for the HTTP interface. This should be reachable by
+  # all the nodes from which end users are going to use the Nomad CLI tools.
+  http = "127.0.0.1"
+  # The address used to advertise to Nomad clients for connecting to Nomad
+  # servers for RPC. This allows Nomad clients to connect to Nomad servers from
+  # behind a NAT gateway. This address much be reachable by all Nomad client
+  # nodes. When set, the Nomad servers will use the advertise.serf address for
+  # RPC connections amongst themselves. Setting this value on a Nomad client has
+  # no effect.
+  rpc = "127.0.0.1"
+}
+# The tls stanza configures Nomad's TLS communication via HTTP and RPC to
+# enforce secure cluster communication between servers, clients, and between.
+tls {
+  # Specifies if TLS should be enabled on the HTTP endpoints on the Nomad agent,
+  # including the API.
+  http = false
+  # Specifies if TLS should be enabled on the RPC endpoints and Raft traffic
+  # between the Nomad servers. Enabling this on a Nomad client makes the client
+  # use TLS for making RPC requests to the Nomad servers.
+  rpc  = false
+  # Specifies agents should require client certificates for all incoming HTTPS
+  # requests. The client certificates must be signed by the same CA as Nomad.
+  verify_https_client = false
+  # Specifies if outgoing TLS connections should verify the server's hostname.
+  verify_server_hostname = false
+}
+
+# Logging:
+##########
+# Specifies the verbosity of logs the Nomad agent will output. Valid log levels
+# include WARN, INFO, or DEBUG in increasing order of verbosity.
+log_level = "INFO"
+# Output logs in a JSON format.
+log_json = true
+# Specifies the path for logging. If the path does not includes a filename, the
+# filename defaults to nomad.log. This setting can be combined with
+# "log_rotate_bytes" and "log_rotate_duration" for a fine-grained log rotation
+# control.
+log_file = "$nomad_client_dir/nomad.log"
+# Specifies if the agent should log to syslog. This option only works on Unix
+# based systems.
+enable_syslog = false
+# Specifies if the debugging HTTP endpoints should be enabled. These endpoints
+# can be used with profiling tools to dump diagnostic information about Nomad's
+# internals.
+enable_debug = false
+
+# Termination:
+##############
+# Specifies if the agent should gracefully leave when receiving the interrupt
+# signal. By default, the agent will exit forcefully on any signal. This value
+# should only be set to true on server agents if it is expected that a
+# terminated server instance will never join the cluster again.
+leave_on_interrupt = true
+# Specifies if the agent should gracefully leave when receiving the terminate
+# signal. By default, the agent will exit forcefully on any signal. This value
+# should only be set to true on server agents if it is expected that a
+# terminated server instance will never join the cluster again.
+leave_on_terminate = true
+
+# Server:
+#########
+# https://developer.hashicorp.com/nomad/docs/configuration/server
+server {
+  # Specifies if this agent should run in server mode. All other server options depend on this value being set.
+  enabled = false
+}
+
 # Client:
 #########
 # https://developer.hashicorp.com/nomad/docs/configuration/client
 client {
+  # Specifies if client mode is enabled. All other client configuration options
+  # depend on this value.
   enabled = true
   # Specifies the directory to use for allocation data. By default, this is the
   # top-level data_dir suffixed with "alloc", like "/opt/nomad/alloc". This must
@@ -1056,6 +1380,9 @@ client {
   # specified as an IP address or DNS, with or without the port. If the port is
   # omitted, the default port of 4647 is used.
   servers = [ "127.0.0.1:4647" ]
+  # Sets the search path that is used for CNI plugin discovery. Multiple paths
+  # can be searched using colon delimited paths.
+#  cni_path = "${cni_plugins_path}"
   # Specifies the maximum amount of time a job is allowed to wait to exit.
   # Individual jobs may customize their own kill timeout, but it may not exceed
   # this value.
