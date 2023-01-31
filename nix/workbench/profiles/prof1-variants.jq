@@ -305,6 +305,11 @@ def all_profile_variants:
       | .genesis.pparamsEpoch         = timeline::lastKnownEpoch
       | .genesis.pparamsOverlays      = ["v8-preview", "stepshalf"]
     ) as $costmodel_v8_preview_stepshalf
+  |
+    ({}
+      | .genesis.pparamsEpoch         = timeline::lastKnownEpoch
+      | .genesis.pparamsOverlays      = ["v8-preview", "doublebudget"]
+    ) as $costmodel_v8_preview_doubleb
   ##
   ### Definition vocabulary:  node config variants
   ##
@@ -527,6 +532,15 @@ def all_profile_variants:
   , $plutus_base * $costmodel_v8_preview_stepshalf * $plutuscall_base * $double_tps_saturation_plutus * $plutus_loop_secp_schnorr *
     { name: "plutuscall-secp-schnorr-stepshalf"
     }    
+  , $plutus_base * $costmodel_v8_preview_doubleb * $plutuscall_base * $double_tps_saturation_plutus * $plutus_loop_counter *
+    { name: "plutuscall-loop-doubleb"
+    }
+  , $plutus_base * $costmodel_v8_preview_doubleb * $plutuscall_base * $double_tps_saturation_plutus * $plutus_loop_secp_ecdsa *
+    { name: "plutuscall-secp-ecdsa-doubleb"
+    }
+  , $plutus_base * $costmodel_v8_preview_doubleb * $plutuscall_base * $double_tps_saturation_plutus * $plutus_loop_secp_schnorr *
+    { name: "plutuscall-secp-schnorr-doubleb"
+    }
 
 ## Dish variants
   , $dish_base *

@@ -23,8 +23,9 @@ def epochPP(x):
 ### Combining timeline with arbitrary extensions:
 ###
 def overlays:
-  { "stepshalf":  blockbudget::delta_stepshalf
-  , "v8-preview": v8preview::delta
+  { "doublebudget": blockbudget::delta_doublebudget
+  , "stepshalf":    blockbudget::delta_stepshalf
+  , "v8-preview":   v8preview::delta
   };
 
 def pParamsWithOverlays(epoch; overlay_names):

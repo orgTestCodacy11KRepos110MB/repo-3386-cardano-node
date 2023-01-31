@@ -6,3 +6,13 @@ def delta_stepshalf:
     }
   }
 };
+
+def delta_doublebudget:
+{
+  alonzo: {
+    "maxBlockExUnits": {
+      "exUnitsMem":   124000000,
+      "exUnitsSteps": 80000000000
+    }
+  }
+};
