@@ -118,22 +118,22 @@ backend_nomad() {
         "{ \
             \"servers\": { \
               \"srv1\": { \
-               , \"region\":\"r1\" \
-               , \"datacenter\":\"dc1\" \
-               , \"ports\":{ \
-                   \"http\":4646 \
-                 , \"rpc\": 4647 \
-                 , \"serf\":4648 \
+                 \"region\": \"r1\" \
+               , \"datacenter\": \"dc1\" \
+               , \"ports\": { \
+                   \"http\": 4646 \
+                 , \"rpc\":  4647 \
+                 , \"serf\": 4648 \
                 } \
               } \
             } \
           , \"clients\": { \
               \"cli1\": { \
-               , \"region\":\"r22\" \
-               , \"datacenter\":\"dc0\" \
+                 \"region\": \"r22\" \
+               , \"datacenter\": \"dc0\" \
                , \"ports\":{ \
-                     \"http\":14646 \
-                   , \"rpc\": 14647 \
+                     \"http\": 14646 \
+                   , \"rpc\":  14647 \
                  } \
                , \"servers\": [ \"srv1\" ] \
               } \
