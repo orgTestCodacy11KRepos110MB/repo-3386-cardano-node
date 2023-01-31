@@ -24,7 +24,7 @@ import           GHC.Natural (Natural)
 
 import           Control.Monad.Trans.Except.Extra
 import           Data.Aeson as Aeson
-import           Data.List (maximumBy)
+import           Data.List (maximumBy, minimumBy)
 import           Data.Ord (comparing)
 
 import           Cardano.Api
@@ -52,6 +52,7 @@ data PlutusBudgetSummary =
   , projectedTxPerBlock     :: !Int
   , projectedLoopsPerBlock  :: !Int
   , projectedTxSize         :: !(Maybe Int)
+  , strategyMessage         :: !(Maybe String)
   }
   deriving (Generic, Show, ToJSON)
 
@@ -92,8 +93,19 @@ plutusAutoScaleBlockfit ::
 plutusAutoScaleBlockfit pparams fp script pab txInputs
   = do
     summaries <- mapM go factors
-    pure $ maximumBy (comparing (\(s, _, _) -> projectedLoopsPerBlock s)) summaries
+    let
+      maxLoops  = maximumBy (comparing (projectedLoopsPerBlock . fst3)) summaries
+      minSteps  = minimumBy (comparing (executionSteps . projectedBudgetUnusedPerBlock . fst3)) summaries
+      msg
+        | budgetStrategy (fst3 maxLoops) == budgetStrategy (fst3 minSteps) =
+          "maximizes loops per block AND minimizes unused execution steps per block"
+        | otherwise =
+          "maximizes loops per block BUT DOES NOT minimize unused execution steps per block"
+    pure $ setMessage msg maxLoops
   where
+    fst3 (x, _, _)  = x
+    setMessage msg (summ, b, c) = (summ {strategyMessage = Just msg}, b, c)
+
     factors = [1.0, 1.25 .. 2.25]
     go (TargetBlockExpenditure -> strat) = do
       result@(pab', _, _) <- plutusAutoBudgetMaxOut pparams script pab strat txInputs
@@ -177,6 +189,7 @@ plutusBudgetSummary
   = PlutusBudgetSummary{..}
   where
     projectedTxSize         = Nothing           -- we defer this value until after splitting phase
+    strategyMessage         = Nothing
     scriptArgDatum          = autoBudgetDatum
     scriptArgRedeemer       = autoBudgetRedeemer
     budgetPerTxInput        = calc budgetPerTx div txInputs
