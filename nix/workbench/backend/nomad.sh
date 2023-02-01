@@ -7,28 +7,31 @@ usage_nomad() {
 
     - - Subcommands that need a RUN-DIR:
 
-    task-service-start      RUN-DIR NOMAD-TASK-NAME SUPERVISORCTL-SERVICE
-    task-service-stop       RUN-DIR NOMAD-TASK-NAME SUPERVISORCTL-SERVICE
-    is-task-service-running RUN-DIR NOMAD-TASK-NAME SUPERVISORCTL-SERVICE
-    task-supervisorctl      RUN-DIR NOMAD-TASK-NAME SUPERVISORCTL-ACTION [ARGS]
+    $(helpcmd task-service-start      RUN-DIR NOMAD-TASK-NAME SUPERVISORCTL-SERVICE)
+    $(helpcmd task-service-stop       RUN-DIR NOMAD-TASK-NAME SUPERVISORCTL-SERVICE)
+    $(helpcmd is-task-service-running RUN-DIR NOMAD-TASK-NAME SUPERVISORCTL-SERVICE)
+    $(helpcmd task-supervisorctl      RUN-DIR NOMAD-TASK-NAME SUPERVISORCTL-ACTION [ARGS])
 
     - - Subcommands that don't need a RUN-DIR:
 
-    nomad agents start SERVER-NAME CLIENT_NAME
-    nomad agents stop  SERVER-NAME CLIENT_NAME
+    $(helpcmd nomad agents start SERVER-NAME CLIENT_NAME)
+                     Start a default 1 server 1 client Nomad cluster.
+    $(helpcmd nomad agents stop  SERVER-NAME CLIENT_NAME)
+                     Stop the default 1 server 1 client Nomad cluster.
 
-    nomad [server|client] config-file NAME
-    nomad [server|client] configure   NAME
-    nomad-[server|client] pid-file    NAME
-    nomad-[server|client] pid         NAME
-    nomad-[server|client] start       NAME
-    nomad-[server|client] stop        NAME
+    $(helpcmd nomad [server|client] state-dir   NAME)
+    $(helpcmd nomad [server|client] config-file NAME)
+    $(helpcmd nomad [server|client] configure   NAME HTTP-PORT RPC-PORT SERV-PORT)
+    $(helpcmd nomad-[server|client] pid-file    NAME)
+    $(helpcmd nomad-[server|client] pid         NAME)
+    $(helpcmd nomad-[server|client] start       NAME)
+    $(helpcmd nomad-[server|client] stop        NAME)
 
-    nomad plugin nomad-driver-podman socket-path
-    nomad plugin nomad-driver-podman pid-file
-    nomad plugin nomad-driver-podman pid
-    nomad plugin nomad-driver-podman start
-    nomad plugin nomad-driver-podman stop
+    $(helpcmd nomad plugin nomad-driver-podman socket-path)
+    $(helpcmd nomad plugin nomad-driver-podman pid-file)
+    $(helpcmd nomad plugin nomad-driver-podman pid)
+    $(helpcmd nomad plugin nomad-driver-podman start)
+    $(helpcmd nomad plugin nomad-driver-podman stop)
 EOF
 }
 
@@ -41,9 +44,9 @@ backend_nomad() {
   # "mkdir: cannot create directory '/homeless-shelter': Permission denied"
   local nomad_agents_dir="$(envjqr 'cacheDir')"/nomad
   mkdir -p "${nomad_agents_dir}"
-  local nomad_servers_dir="${nomad_agents_dir}"/servers
+  local nomad_servers_dir="${nomad_agents_dir}"/server
   mkdir -p "${nomad_servers_dir}"
-  local nomad_clients_dir="${nomad_agents_dir}"/clients
+  local nomad_clients_dir="${nomad_agents_dir}"/client
   mkdir -p "${nomad_clients_dir}"
   # TODO: Which directory ? State, cache, config ?
   # local nomad_state_dir=${XDG_STATE_HOME:-$HOME/.local/state}/cardano-workbench/nomad
@@ -112,8 +115,9 @@ backend_nomad() {
       ##  The configured network mode (Actually only "host" or "bridge").
       setenvjq    'profile_nomad_job_group_network_mode' $(jq ". [\"job\"][\"$profile_nomad_job_name\"][\"group\"][\"$profile_nomad_job_group_name\"][\"network\"][\"mode\"]" "$profile_nomad_job_file")
 
-      setenvjq 'nomad_client_name' "1"
-      setenvjq 'nomad_server_name' "1"
+
+      setenvjqstr 'nomad_server_name' srv1
+      setenvjqstr 'nomad_client_name' cli1
       # TODO: Once we start testing multicluster deployments, the Nomad cluster
       # must be created or obtained.
       setenvjq 'nomad_topology' \
@@ -312,27 +316,32 @@ backend_nomad() {
     start )
       local usage="USAGE: wb backend $op RUN-DIR"
       local dir=${1:?$usage}; shift
+
       local one_tracer_per_node=$(envjq 'one_tracer_per_node')
-      local nomad_server_name=$(envjq 'nomad_server_name')
-      local nomad_client_name=$(envjq 'nomad_client_name')
+      local server_name=$(envjqr 'nomad_server_name')
+      local client_name=$(envjqr 'nomad_client_name')
+      local server_state_dir=$(backend_nomad nomad server state-dir "${server_name}")
+      local client_state_dir=$(backend_nomad nomad client state-dir "${client_name}")
 
       # Reuse an already running cardano-workbench Nomad server!
       # TODO: If only agent the failed-quit, it won't work!
-      if backend_nomad nomad server pid "${nomad_server_name}" >/dev/null
+      if backend_nomad nomad server pid "${server_name}" >/dev/null
       then
         setenvjqstr 'nomad_agents_were_already_running' "true"
         msg "Reusing already up and running Nomad agents (server found)"
       else
         setenvjqstr 'nomad_agents_were_already_running' "false"
         # Start server, client and plugins.
-        backend_nomad nomad agents start "${nomad_server_name}" "${nomad_client_name}"
+        backend_nomad nomad agents start "${server_name}" "${client_name}"
       fi
-      ln -s "$nomad_servers_dir"/"${nomad_server_name}"/nomad.log "$dir"/nomad/server-"${nomad_server_name}".log
-      ln -s "$nomad_servers_dir"/"${nomad_server_name}"/stdout "$dir"/nomad/server-"${nomad_server_name}".stdout
-      ln -s "$nomad_servers_dir"/"${nomad_server_name}"/stderr "$dir"/nomad/server-"${nomad_server_name}".stderr
-      ln -s "$nomad_clients_dir"/"${nomad_client_name}"/nomad.log "$dir"/nomad/client-"${nomad_client_name}".log
-      ln -s "$nomad_clients_dir"/"${nomad_client_name}"/stdout "$dir"/nomad/client-"${nomad_client_name}".stdout
-      ln -s "$nomad_clients_dir"/"${nomad_client_name}"/stderr "$dir"/nomad/client-"${nomad_client_name}".stderr
+
+      # Links to Nomad agents logs.
+      ln -s "${server_state_dir}"/nomad.log "$dir"/nomad/server-"${server_name}".log
+      ln -s "${server_state_dir}"/stdout "$dir"/nomad/server-"${server_name}".stdout
+      ln -s "${server_state_dir}"/stderr "$dir"/nomad/server-"${server_name}".stderr
+      ln -s "${client_state_dir}"/nomad.log "$dir"/nomad/client-"${client_name}".log
+      ln -s "${client_state_dir}"/stdout "$dir"/nomad/client-"${client_name}".stdout
+      ln -s "${client_state_dir}"/stderr "$dir"/nomad/client-"${client_name}".stderr
 
       msg "Starting nomad job ..."
       # Upon successful job submission, this command will immediately enter
@@ -352,9 +361,9 @@ backend_nomad() {
       setenvjqstr 'nomad_alloc_id' "$nomad_alloc_id"
       msg "Nomad job allocation ID is: $nomad_alloc_id"
 
+      local alloc_dir="${client_state_dir}"/data/alloc/"${nomad_alloc_id}"
       # Create a symlink to the allocation ID inside the run directory
-      ln -s "$nomad_clients_dir/${nomad_client_name}/data/alloc/$nomad_alloc_id" "$dir"/nomad/alloc
-
+      ln -s "${alloc_dir}" "$dir"/nomad/alloc
       # A supervisord server is run for every Nomad task/container.
       # A symlink to every supervisor folder will be created inside this folder.
       mkdir -p "$dir"/supervisor
@@ -362,17 +371,17 @@ backend_nomad() {
       local nodes=($(jq_tolist keys "$dir"/node-specs.json))
       for node in ${nodes[*]}
       do
-        ln -s "$nomad_clients_dir/${nomad_client_name}/data/alloc/$nomad_alloc_id/$node/local/run/current/$node" "$dir/$node"
-        ln -s "$nomad_clients_dir/${nomad_client_name}/data/alloc/$nomad_alloc_id/$node/local/run/current/supervisor" "$dir/supervisor/$node"
+        ln -s "${alloc_dir}/$node/local/run/current/$node" "$dir/$node"
+        ln -s "${alloc_dir}/$node/local/run/current/supervisor" "$dir/supervisor/$node"
         # Tracer(s).
         if jqtest ".node.tracer" "$dir"/profile.json && test "$one_tracer_per_node" = "true"
         then
           # A symlink to every tracer folder.
-          ln -s "$nomad_clients_dir/${nomad_client_name}/data/alloc/$nomad_alloc_id/$node/local/run/current/tracer" "$dir/tracer/$node"
+          ln -s "${alloc_dir}/$node/local/run/current/tracer" "$dir/tracer/$node"
         fi
       done
       # Generator runs inside task/supervisord "node-0"
-      ln -s "$nomad_clients_dir/${nomad_client_name}/data/alloc/$nomad_alloc_id/node-0/local/run/current/generator" "$dir/generator"
+      ln -s "${alloc_dir}/node-0/local/run/current/generator" "$dir/generator"
 
       # Show `--status` of `supervisorctl` inside the container.
       local container_supervisor_nix=$(  envjqr 'container_supervisor_nix')
@@ -575,8 +584,8 @@ backend_nomad() {
       local nomad_agents_were_already_running=$(envjqr 'nomad_agents_were_already_running')
       if test "$nomad_agents_were_already_running" = "false"
       then
-        local nomad_server_name=$(envjq 'nomad_server_name')
-        local nomad_client_name=$(envjq 'nomad_client_name')
+        local nomad_server_name=$(envjqr 'nomad_server_name')
+        local nomad_client_name=$(envjqr 'nomad_client_name')
         backend_nomad nomad agents stop "${nomad_server_name}" "${nomad_client_name}"
       fi
 
@@ -662,11 +671,16 @@ backend_nomad() {
               local server_name=${1:?$usage}; shift
               local client_name=${1:?$usage}; shift
               # Create config files for the server.
-              backend_nomad nomad server configure "${server_name}"
-              # Create config files for the client and the Podman plugin/task driver.
-              backend_nomad nomad client configure "${client_name}"
-              backend_nomad nomad plugin nomad-driver-podman start
+              backend_nomad nomad server configure "${server_name}" \
+                4646 4647 4648
               backend_nomad nomad server start "${server_name}"
+              # Create config files for the client and the Podman plugin/task driver.
+              backend_nomad nomad plugin nomad-driver-podman start
+              # WARNING: Actually the client is configured to connect to the
+              # running servers, so if the server is not already running
+              # the Nomad cluster won't work.
+              backend_nomad nomad client configure "${client_name}" \
+                14646 14647 14648
               backend_nomad nomad client start "${client_name}"
             ;;
             stop )
@@ -683,51 +697,84 @@ backend_nomad() {
 ####### server ) ###############################################################
 ################################################################################
         server )
-          local usage="USAGE: wb backend pass $op $agent config-file|configure|start|stop"
+          local usage="USAGE: wb backend pass $op $agent state-dir|config-file|configure|pid-file|pid|start|stop"
           local subop=${1:?$usage}; shift
           case "$subop" in
-            config-file )
-              local usage="USAGE: wb backend pass $op $agent config-file NAME"
+            state-dir )
+              local usage="USAGE: wb backend pass $op $agent $subop NAME"
               local name=${1:?$usage}; shift
-              echo "$nomad_servers_dir"/"${name}"/config/nomad.hcl
+              echo "$nomad_servers_dir"/"${name}"
+            ;;
+            config-file )
+              local usage="USAGE: wb backend pass $op $agent $subop NAME"
+              local name=${1:?$usage}; shift
+              local state_dir=$(backend_nomad nomad server state-dir "${name}")
+              echo "${state_dir}"/config/nomad.hcl
             ;;
             configure )
-              local usage="USAGE: wb backend pass $op $agent configure NAME"
+              local usage="USAGE: wb backend pass $op $agent $subop NAME HTTP-PORT RPC-PORT SERV-PORT"
               local name=${1:?$usage}; shift
+              local http_port=${1:?$usage}; shift
+              local rpc_port=${1:?$usage}; shift
+              local serv_port=${1:?$usage}; shift
               # Checks
               if backend_nomad nomad server pid "${name}" >/dev/null
               then
                 fatal "Nomad server \"${name}\" is already running, call 'wb backend pass nomad server stop ${name}' first"
               else
+                local state_dir=$(backend_nomad nomad server state-dir "${name}")
                 # Needed folders:
-                mkdir -p "${nomad_servers_dir}"/"${name}"/config
-                mkdir -p "${nomad_servers_dir}"/"${name}"/data/server
-                # Vars
-                local nomad_server_config_file=$(backend_nomad nomad server config-file "${name}")
+                mkdir -p "${state_dir}"/config
+                mkdir -p "${state_dir}"/data/server
+                # Store the ports
+                echo "{\"http\": ${http_port}, \"rpc\": ${rpc_port}, \"serv\": ${serv_port}}" > "${state_dir}"/ports.json
                 # Configure
-                nomad_create_server_config "${name}" "${nomad_server_config_file}"
+                nomad_create_server_config "${name}" \
+                  "${http_port}" "${rpc_port}" "${serv_port}"
               fi
             ;;
-            pid-file )
-              local usage="USAGE: wb backend pass $op $agent pid-file NAME"
+            port )
+              local usage="USAGE: wb backend pass $op $agent $subop (http|rcp|serv) NAME"
+              local port=${1:?$usage}; shift
               local name=${1:?$usage}; shift
+              local state_dir=$(backend_nomad nomad server state-dir "${name}")
+              local ports_file="${state_dir}"/ports.json
+              case "$port" in
+                http )
+                  jq .http "${ports_file}"
+                ;;
+                rpc )
+                  jq .rpc "${ports_file}"
+                ;;
+                serv )
+                  jq .serv "${ports_file}"
+                ;;
+                * )
+                  false
+                ;;
+              esac
+            ;;
+            pid-file )
+              local usage="USAGE: wb backend pass $op $agent $subop NAME"
+              local name=${1:?$usage}; shift
+              local state_dir=$(backend_nomad nomad server state-dir "${name}")
               # Look up PID by Nomad server name
-              echo "$nomad_servers_dir"/"${name}"/nomad.pid
+              echo "${state_dir}"/nomad.pid
             ;;
             pid )
-              local usage="USAGE: wb backend pass $op $agent pid NAME"
+              local usage="USAGE: wb backend pass $op $agent $subop NAME"
               local name=${1:?$usage}; shift
               # Look up PID by Nomad server name
-              local nomad_server_pid_file=$(backend_nomad nomad server pid-file "${name}")
-              if test -f $nomad_server_pid_file
+              local pid_file=$(backend_nomad nomad server pid-file "${name}")
+              if test -f $pid_file
               then
-                local nomad_server_pid_number=$(cat "${nomad_server_pid_file}")
+                local pid_number=$(cat "${pid_file}")
                 # Check if the process is running
-                if kill -0 "${nomad_server_pid_number}" 2>&1 >/dev/null
+                if kill -0 "${pid_number}" 2>&1 >/dev/null
                 then
-                  echo "${nomad_server_pid_number}"
+                  echo "${pid_number}"
                 else
-                  rm "${nomad_server_pid_file}"
+                  rm "${pid_file}"
                   false
                 fi
               else
@@ -735,23 +782,24 @@ backend_nomad() {
               fi
             ;;
             start )
-              local usage="USAGE: wb backend pass $op $agent start NAME"
+              local usage="USAGE: wb backend pass $op $agent $subop NAME"
               local name=${1:?$usage}; shift
+              local state_dir=$(backend_nomad nomad server state-dir "${name}")
               # Checks
-              local nomad_server_pid_number
+              local pid_number
               # Call without `local` to obtain the subcommand's return code.
-              if nomad_server_pid_number=$(backend_nomad nomad server pid "${name}")
+              if pid_number=$(backend_nomad nomad server pid "${name}")
               then
-                msg "Nomad server \"${name}\" is already running with PID ${nomad_server_pid_number}"
+                msg "Nomad server \"${name}\" is already running with PID ${pid_number}"
               else
                 # Start `nomad` server".
                 msg "Starting nomad server \"${name}\" ..."
-                local nomad_server_config_file=$(backend_nomad nomad server config-file "${name}")
-                local nomad_server_pid_file=$(backend_nomad nomad server pid-file "${name}")
-                nomad agent -config="${nomad_server_config_file}" >> "${nomad_servers_dir}"/"${name}"/stdout 2>> "${nomad_servers_dir}"/"${name}"/stderr &
-                nomad_server_pid_number="$!"
-                echo "${nomad_server_pid_number}" > "${nomad_server_pid_file}"
-                msg "Nomad server \"${name}\" started with PID ${nomad_server_pid_number}"
+                local config_file=$(backend_nomad nomad server config-file "${name}")
+                local pid_file=$(backend_nomad nomad server pid-file "${name}")
+                nomad agent -config="${config_file}" >> "${state_dir}"/stdout 2>> "${state_dir}"/stderr &
+                pid_number="$!"
+                echo "${pid_number}" > "${pid_file}"
+                msg "Nomad server \"${name}\" started with PID ${pid_number}"
               fi
               # Even if Nomad server was already running, try to connect to it!
               local i=0 patience=25
@@ -762,28 +810,28 @@ backend_nomad() {
                 if test $i -ge $patience
                 then echo
                   progress "nomad agent" "$(red FATAL):  workbench:  nomad server:  patience ran out after ${patience}s, 127.0.0.1:4646"
-                  tail "${nomad_servers_dir}"/"${name}"/stderr
-                  rm "$nomad_server_pid_file"
+                  tail "${state_dir}"/stderr
+                  rm "$pid_file"
                   fatal "nomad server startup did not succeed:  check logs"
                 fi
                 echo -ne "\b\b\b"
               done >&2
             ;;
             stop )
-              local usage="USAGE: wb backend pass $op $agent stop NAME"
+              local usage="USAGE: wb backend pass $op $agent $subop NAME"
               local name=${1:?$usage}; shift
               # Stop Nomad server by name
-              local nomad_server_pid_number
+              local pid_number
               # Call without `local` to obtain the subcommand's return code.
-              if nomad_server_pid_number=$(backend_nomad nomad server pid "${name}")
+              if pid_number=$(backend_nomad nomad server pid "${name}")
               then
-                msg "Killing Nomad server \"${name}\" (PID ${nomad_server_pid_number}) ..."
-                if ! kill -SIGINT "${nomad_server_pid_number}"
+                msg "Killing Nomad server \"${name}\" (PID ${pid_number}) ..."
+                if ! kill -SIGINT "${pid_number}"
                 then
                   fatal "Killing Nomad server \"${name}\" failed"
                 fi
-                local nomad_server_pid_file=$(backend_nomad nomad server pid-file "${name}")
-                rm "${nomad_server_pid_file}"
+                local pid_file=$(backend_nomad nomad server pid-file "${name}")
+                rm "${pid_file}"
               else
                 msg "Nomad server \"${name}\" is not running"
                 false
@@ -795,37 +843,46 @@ backend_nomad() {
 ####### client ) ###############################################################
 ################################################################################
         client )
-          local usage="USAGE: wb backend pass $op $agent config-file|configure|start|stop"
+          local usage="USAGE: wb backend pass $op $agent state-dir|config-file|configure|pid-file|pid|start|stop"
           local subop=${1:?$usage}; shift
           case "$subop" in
-            config-file )
-              local usage="USAGE: wb backend pass $op $agent config-file NAME"
+            state-dir )
+              local usage="USAGE: wb backend pass $op $agent $subop NAME"
               local name=${1:?$usage}; shift
-              echo "$nomad_clients_dir"/"${name}"/config/nomad.hcl
+              echo "$nomad_clients_dir"/"${name}"
+            ;;
+            config-file )
+              local usage="USAGE: wb backend pass $op $agent $subop NAME"
+              local name=${1:?$usage}; shift
+              local state_dir=$(backend_nomad nomad client state-dir "${name}")
+              echo "${state_dir}"/config/nomad.hcl
             ;;
             configure )
-              local usage="USAGE: wb backend pass $op $agent configure NAME"
+              local usage="USAGE: wb backend pass $op $agent $subop NAME HTTP-PORT RPC-PORT SERV-PORT"
               local name=${1:?$usage}; shift
+              local http_port=${1:?$usage}; shift
+              local rpc_port=${1:?$usage}; shift
+              local serv_port=${1:?$usage}; shift
               # Checks
               if backend_nomad nomad client pid "${name}" >/dev/null
               then
                 fatal "Nomad client \"${name}\" is already running, call 'wb backend pass nomad client stop ${name}' first"
               else
+                local state_dir=$(backend_nomad nomad client state-dir "${name}")
                 # Needed folders:
-                mkdir -p "${nomad_clients_dir}"/"${name}"/config
-                mkdir -p "${nomad_clients_dir}"/"${name}"/data/client
-                mkdir -p "${nomad_clients_dir}"/"${name}"/data/plugins
-                mkdir -p "${nomad_clients_dir}"/"${name}"/data/alloc
+                mkdir -p "${state_dir}"/config
+                mkdir -p "${state_dir}"/data/{client,plugins,alloc}
+                # Store the ports
+                echo "{\"http\": ${http_port}, \"rpc\": ${rpc_port}, \"serv\": ${serv_port}}" > "${state_dir}"/ports.json
                 # Vars
-                local nomad_client_config_file=$(backend_nomad nomad client config-file "${name}")
                 local podman_socket_path=$(backend_nomad nomad plugin nomad-driver-podman socket-path)
                 # Podman Task Driver - Client Requirements:
                 ## "Ensure that Nomad can find the plugin, refer to `plugin_dir`."
                 ### https://www.nomadproject.io/plugins/drivers/podman#client-requirements
                 ## On every call to `wb backend pass nomad client configure` the
                 ## available `nomad-driver-podman` is replaced.
-                rm  -f "${nomad_clients_dir}"/"${name}"/data/plugins/nomad-driver-podman
-                ln -s -f "$(which nomad-driver-podman)" "${nomad_clients_dir}"/"${name}"/data/plugins/nomad-driver-podman
+                rm  -f "${state_dir}"/data/plugins/nomad-driver-podman
+                ln -s -f "$(which nomad-driver-podman)" "${state_dir}"/data/plugins/nomad-driver-podman
                 # TODO: CNI plugins?
                 ####################
                 # local cni_plugins_path="${nomad_clients_dir}"/data/plugins/cni-plugins
@@ -835,29 +892,53 @@ backend_nomad() {
                 #ln -s -f "$(dirname $(which host-device))" "${cni_plugins_path}"
                 ####################
                 # Configure
-                nomad_create_client_config "${name}" "${nomad_client_config_file}" "${podman_socket_path}" #"${cni_plugins_path}"
+                nomad_create_client_config "${name}" \
+                  "${http_port}" "${rpc_port}" "${serv_port}" \
+                  "${podman_socket_path}" #"${cni_plugins_path}"
               fi
             ;;
-            pid-file )
-              local usage="USAGE: wb backend pass $op $agent pid-file NAME"
+            port )
+              local usage="USAGE: wb backend pass $op $agent $subop NAME (http|rcp|serv)"
               local name=${1:?$usage}; shift
+              local port=${1:?$usage}; shift
+              local state_dir=$(backend_nomad nomad server state-dir "${name}")
+              local ports_file="${state_dir}"/ports.json
+              case "$port" in
+                http )
+                  jq .http "${ports_file}"
+                ;;
+                rpc )
+                  jq .rpc "${ports_file}"
+                ;;
+                serv )
+                  jq .serv "${ports_file}"
+                ;;
+                * )
+                  false
+                ;;
+              esac
+            ;;
+            pid-file )
+              local usage="USAGE: wb backend pass $op $agent $subop NAME"
+              local name=${1:?$usage}; shift
+              local state_dir=$(backend_nomad nomad client state-dir "${name}")
               # Look up PID by Nomad client name
-              echo "$nomad_clients_dir"/"${name}"/nomad.pid
+              echo "${state_dir}"/nomad.pid
             ;;
             pid )
-              local usage="USAGE: wb backend pass $op $agent pid NAME"
+              local usage="USAGE: wb backend pass $op $agent $subop NAME"
               local name=${1:?$usage}; shift
               # Look up PID by Nomad client name
-              local nomad_client_pid_file=$(backend_nomad nomad client pid-file "${name}")
-              if test -f $nomad_client_pid_file
+              local pid_file=$(backend_nomad nomad client pid-file "${name}")
+              if test -f $pid_file
               then
-                local nomad_client_pid_number=$(cat "${nomad_client_pid_file}")
+                local pid_number=$(cat "${pid_file}")
                 # Check if the process is running
-                if kill -0 "${nomad_client_pid_number}" 2>&1 >/dev/null
+                if kill -0 "${pid_number}" 2>&1 >/dev/null
                 then
-                  echo "${nomad_client_pid_number}"
+                  echo "${pid_number}"
                 else
-                  rm "${nomad_client_pid_file}"
+                  rm "${pid_file}"
                   false
                 fi
               else
@@ -865,23 +946,24 @@ backend_nomad() {
               fi
             ;;
             start )
-              local usage="USAGE: wb backend pass $op $agent start NAME"
+              local usage="USAGE: wb backend pass $op $agent $subop NAME"
               local name=${1:?$usage}; shift
+              local state_dir=$(backend_nomad nomad client state-dir "${name}")
               # Checks
-              local nomad_client_pid_number
+              local pid_number
               # Call without `local` to obtain the subcommand's return code.
-              if nomad_client_pid_number=$(backend_nomad nomad client pid "${name}")
+              if pid_number=$(backend_nomad nomad client pid "${name}")
               then
-                msg "Nomad client \"${name}\" is already running with PID ${nomad_client_pid_number}"
+                msg "Nomad client \"${name}\" is already running with PID ${pid_number}"
               else
                 # Start `nomad` client".
                 msg "Starting nomad client \"${name}\" ..."
-                local nomad_client_config_file=$(backend_nomad nomad client config-file "${name}")
-                local nomad_client_pid_file=$(backend_nomad nomad client pid-file "${name}")
-                nomad agent -config="${nomad_client_config_file}" >> "${nomad_clients_dir}"/"${name}"/stdout 2>> "${nomad_clients_dir}"/"${name}"/stderr &
-                nomad_client_pid_number="$!"
-                echo "${nomad_client_pid_number}" > "${nomad_client_pid_file}"
-                msg "Nomad client \"${name}\" started with PID ${nomad_client_pid_number}"
+                local config_file=$(backend_nomad nomad client config-file "${name}")
+                local pid_file=$(backend_nomad nomad client pid-file "${name}")
+                nomad agent -config="${config_file}" >> "${state_dir}"/stdout 2>> "${state_dir}"/stderr &
+                pid_number="$!"
+                echo "${pid_number}" > "${pid_file}"
+                msg "Nomad client \"${name}\" started with PID ${pid_number}"
               fi
               # Even if Nomad server was already running, try to connect to it!
               local i=0 patience=25
@@ -892,28 +974,28 @@ backend_nomad() {
                 if test $i -ge $patience
                 then echo
                 progress "nomad agent" "$(red FATAL):  workbench:  nomad client:  patience ran out after ${patience}s, 127.0.0.1:14646"
-                  tail "${nomad_clients_dir}"/"${name}"/stderr
-                  rm "$nomad_client_pid_file"
+                  tail "${state_dir}"/stderr
+                  rm "$pid_file"
                   fatal "nomad client startup did not succeed:  check logs"
                 fi
                 echo -ne "\b\b\b"
               done >&2
             ;;
             stop )
-              local usage="USAGE: wb backend pass $op $agent stop NAME"
+              local usage="USAGE: wb backend pass $op $agent $subop NAME"
               local name=${1:?$usage}; shift
               # Stop Nomad client by name
-              local nomad_client_pid_number
+              local pid_number
               # Call without `local` to obtain the subcommand's return code.
-              if nomad_client_pid_number=$(backend_nomad nomad client pid "${name}")
+              if pid_number=$(backend_nomad nomad client pid "${name}")
               then
-                msg "Killing Nomad client \"${name}\" (PID ${nomad_client_pid_number}) ..."
-                if ! kill -SIGINT "${nomad_client_pid_number}"
+                msg "Killing Nomad client \"${name}\" (PID ${pid_number}) ..."
+                if ! kill -SIGINT "${pid_number}"
                 then
                   fatal "Killing Nomad client \"${name}\" failed"
                 fi
-                local nomad_client_pid_file=$(backend_nomad nomad client pid-file "${name}")
-                rm "${nomad_client_pid_file}"
+                local pid_file=$(backend_nomad nomad client pid-file "${name}")
+                rm "${pid_file}"
               else
                 msg "Nomad client \"${name}\" is not running"
                 false
@@ -1070,8 +1152,12 @@ backend_nomad() {
 #     mkdir -p $HOME/.config/containers/
 #     touch $HOME/.config/containers/policy.json
 nomad_create_server_config() {
-  local nomad_server_name=$1
-  local nomad_server_config_file=$2
+  local name=$1
+  local http_port=$2
+  local rpc_port=$3
+  local serv_port=$4
+  local state_dir=$(backend_nomad nomad server state-dir "${name}")
+  local config_file=$(backend_nomad nomad server config-file "${name}")
   # Config:
   # - `nomad` configuration docs:
   # - - https://developer.hashicorp.com/nomad/docs/configuration
@@ -1081,7 +1167,7 @@ nomad_create_server_config() {
   # - Specific `nomad` `podman` plugin / task driver configuration docs:
   # - - https://www.nomadproject.io/plugins/drivers/podman#plugin-options
   # - - https://github.com/hashicorp/nomad-driver-podman#driver-configuration
-  cat > "${nomad_server_config_file}" <<- EOF
+  cat > "${config_file}" <<- EOF
 # Names:
 ########
 # Specifies the region the Nomad agent is a member of. A region typically maps
@@ -1094,7 +1180,7 @@ datacenter = "workbench-datacenter-1"
 # Specifies the name of the local node. This value is used to identify
 # individual agents. When specified on a server, the name must be unique within
 # the region.
-name = "workbench-nomad-server-${nomad_server_name}"
+name = "workbench-nomad-server-${name}"
 
 # Paths:
 ########
@@ -1103,7 +1189,7 @@ name = "workbench-nomad-server-${nomad_server_name}"
 # information. Server nodes use this directory to store cluster state, including
 # the replicated log and snapshot data. This must be specified as an absolute
 # path.
-data_dir  = "${nomad_servers_dir}/${nomad_server_name}/data"
+data_dir  = "${state_dir}/data"
 
 # Network:
 ##########
@@ -1118,13 +1204,13 @@ bind_addr = "127.0.0.1"
 # agent.
 ports = {
   # The port used to run the HTTP server.
-  http = 4646
+  http = ${http_port}
   # The port used for internal RPC communication between agents and servers, and
   # for inter-server traffic for the consensus algorithm (raft).
-  rpc  = 4647
+  rpc  = ${rpc_port}
   # The port used for the gossip protocol for cluster membership. Both TCP and
   # UDP should be routable between the server nodes on this port.
-  serf = 4648
+  serf = ${serv_port}
 }
 # Specifies the advertise address for individual network services. This can be
 # used to advertise a different address to the peers of a server or a client
@@ -1184,7 +1270,7 @@ log_json = true
 # filename defaults to nomad.log. This setting can be combined with
 # "log_rotate_bytes" and "log_rotate_duration" for a fine-grained log rotation
 # control.
-log_file = "${nomad_servers_dir}/${nomad_server_name}/nomad.log"
+log_file = "${state_dir}/nomad.log"
 # Specifies if the agent should log to syslog. This option only works on Unix
 # based systems.
 enable_syslog = false
@@ -1225,7 +1311,7 @@ server {
   # replicated log. By default, this is the top-level "data_dir" suffixed with
   # "server", like "/opt/nomad/server". The top-level option must be set, even
   # when setting this value. This must be an absolute path.
-  data_dir = "${nomad_servers_dir}/${nomad_server_name}/data/server"
+  data_dir = "${state_dir}/data/server"
   # Specifies the number of server nodes to wait for before bootstrapping. It is
   # most common to use the odd-numbered integers 3 or 5 for this value,
   # depending on the cluster size. A value of 1 does not provide any fault
@@ -1303,10 +1389,22 @@ EOF
 }
 
 nomad_create_client_config() {
-  local nomad_client_name=$1
-  local nomad_client_config_file=$2
-  local podman_socket_path=$3
+  local name=$1
+  local state_dir=$(backend_nomad nomad client state-dir "${name}")
+  local config_file=$(backend_nomad nomad client config-file "${name}")
+  local http_port=$2
+  local rpc_port=$3
+  local serv_port=$4
+  local podman_socket_path=$5
   local cni_plugins_path="TODO"
+  local servers_addresses=""
+  for server_name in $(ls "${nomad_servers_dir}"); do
+    if backend_nomad nomad server pid "${server_name}" >/dev/null
+    then
+      local port=$(backend_nomad nomad server port rpc "${server_name}")
+      servers_addresses="${servers_addresses} \"127.0.0.1:${port}\""
+    fi
+  done
 #  local cni_plugins_path=$3
   # Config:
   # - `nomad` configuration docs:
@@ -1317,7 +1415,7 @@ nomad_create_client_config() {
   # - Specific `nomad` `podman` plugin / task driver configuration docs:
   # - - https://www.nomadproject.io/plugins/drivers/podman#plugin-options
   # - - https://github.com/hashicorp/nomad-driver-podman#driver-configuration
-  cat > "${nomad_client_config_file}" <<- EOF
+  cat > "${config_file}" <<- EOF
 # Names:
 ########
 # Specifies the region the Nomad agent is a member of. A region typically maps
@@ -1330,7 +1428,7 @@ datacenter = "workbench-datacenter-1"
 # Specifies the name of the local node. This value is used to identify
 # individual agents. When specified on a server, the name must be unique within
 # the region.
-name = "workbench-nomad-client-${nomad_client_name}"
+name = "workbench-nomad-client-${name}"
 
 # Paths:
 ########
@@ -1339,11 +1437,11 @@ name = "workbench-nomad-client-${nomad_client_name}"
 # information. Server nodes use this directory to store cluster state, including
 # the replicated log and snapshot data. This must be specified as an absolute
 # path.
-data_dir  = "${nomad_clients_dir}/${nomad_client_name}/data"
+data_dir  = "${state_dir}/data"
 # Specifies the directory to use for looking up plugins. By default, this is the
 # top-level data_dir suffixed with "plugins", like "/opt/nomad/plugins". This
 # must be an absolute path.
-plugin_dir  = "${nomad_clients_dir}/${nomad_client_name}/data/plugins"
+plugin_dir  = "${state_dir}/data/plugins"
 
 # Network:
 ##########
@@ -1358,10 +1456,10 @@ bind_addr = "127.0.0.1"
 # agent.
 ports = {
   # The port used to run the HTTP server.
-  http = 14646
+  http = ${http_port}
   # The port used for internal RPC communication between agents and servers, and
   # for inter-server traffic for the consensus algorithm (raft).
-  rpc  = 14647
+  rpc  = ${rpc_port}
 }
 # Specifies the advertise address for individual network services. This can be
 # used to advertise a different address to the peers of a server or a client
@@ -1417,7 +1515,7 @@ log_json = true
 # filename defaults to nomad.log. This setting can be combined with
 # "log_rotate_bytes" and "log_rotate_duration" for a fine-grained log rotation
 # control.
-log_file = "${nomad_clients_dir}/${nomad_client_name}/nomad.log"
+log_file = "${state_dir}/nomad.log"
 # Specifies if the agent should log to syslog. This option only works on Unix
 # based systems.
 enable_syslog = false
@@ -1457,17 +1555,17 @@ client {
   # Specifies the directory to use for allocation data. By default, this is the
   # top-level data_dir suffixed with "alloc", like "/opt/nomad/alloc". This must
   # be an absolute path.
-  alloc_dir = "${nomad_clients_dir}/${nomad_client_name}/data/alloc"
+  alloc_dir = "${state_dir}/data/alloc"
   # Specifies the directory to use to store client state. By default, this is
   # the top-level "data_dir" suffixed with "client", like "/opt/nomad/client".
   # This must be an absolute path.
-  state_dir = "${nomad_clients_dir}/${nomad_client_name}/data/client"
+  state_dir = "${state_dir}/data/client"
   # Specifies an array of addresses to the Nomad servers this client should join.
   # This list is used to register the client with the server nodes and advertise
   # the available resources so that the agent can receive work. This may be
   # specified as an IP address or DNS, with or without the port. If the port is
   # omitted, the default port of 4647 is used.
-  servers = [ "127.0.0.1:4647" ]
+  servers = [ ${servers_addresses} ]
   # Sets the search path that is used for CNI plugin discovery. Multiple paths
   # can be searched using colon delimited paths.
 #  cni_path = "${cni_plugins_path}"
