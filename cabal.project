@@ -173,6 +173,8 @@ allow-newer:
   , ouroboros-network:hashable
   , hedgehog-extras:base
   , libsystemd-journal:base
+  -- This is required for 9.2.
+  , katip:Win32
 
 -- IMPORTANT
 -- Do NOT add more source-repository-package stanzas here unless they are strictly
